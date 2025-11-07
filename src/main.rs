@@ -3,8 +3,11 @@ use paste_vault::db::Database;
 use paste_vault::patterns::PatternDetector;
 use paste_vault::rate_limiter::SourceRateLimiter;
 use paste_vault::scheduler::Scheduler;
+use paste_vault::scrapers::pastebin::PastebinScraper;
+use paste_vault::scrapers::traits::Scraper;
 use paste_vault::web::{create_router, AppState};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -29,18 +32,51 @@ async fn main() -> anyhow::Result<()> {
     println!("✓ Rate limiter configured");
 
     // Create pattern detector
-    let patterns = vec![]; // TODO: load from config
-    let detector = PatternDetector::new(patterns);
-    println!("✓ Pattern detector initialized");
+    let detector = PatternDetector::load_all();
+    println!("✓ Pattern detector initialized with {} patterns", detector.pattern_count());
 
-    // Create scheduler (note: would need Arc-wrapped DB)
-    let _scheduler = Scheduler::new(
-        Database::open(&config.storage.db_path)?,
-        detector,
-        rate_limiter,
-        config.scraping.interval_seconds,
-    );
-    println!("✓ Scheduler created");
+    // Create scheduler for processing pastes
+    let scraper_interval = config.scraping.interval_seconds;
+    let detector_clone = detector.clone();
+    
+    // Spawn scraper task
+    tokio::spawn({
+        let scraper_config = config.clone();
+        let detector = detector_clone.clone();
+        let rate_limiter = rate_limiter.clone();
+        async move {
+            let client = reqwest::Client::new();
+            let pastebin = PastebinScraper::new();
+            
+            loop {
+                match pastebin.fetch_recent(&client).await {
+                    Ok(discovered_pastes) => {
+                        println!("✓ Fetched {} pastes from Pastebin", discovered_pastes.len());
+                        
+                        // Process each paste through scheduler
+                        let mut scheduler = Scheduler::new(
+                            Database::open(&scraper_config.storage.db_path).unwrap(),
+                            detector.clone(),
+                            rate_limiter.clone(),
+                            scraper_interval,
+                        );
+                        
+                        for paste in discovered_pastes {
+                            if let Err(e) = scheduler.process_paste(paste) {
+                                tracing::warn!("Failed to process paste: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Scraper error: {}", e);
+                    }
+                }
+                
+                tokio::time::sleep(Duration::from_secs(scraper_interval)).await;
+            }
+        }
+    });
+    println!("✓ Scraper task spawned with {} second interval", scraper_interval);
 
     // Create web server state
     let app_state = AppState {

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
 /// Simple rate limiter using timestamps
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct SimpleRateLimiter {
     last_request: SystemTime,
     interval: Duration,
@@ -31,6 +31,7 @@ impl SimpleRateLimiter {
 }
 
 /// Rate limiter for controlling request frequency per source
+#[derive(Clone)]
 pub struct SourceRateLimiter {
     limiters: Arc<Mutex<HashMap<String, SimpleRateLimiter>>>,
     jitter_min_ms: u64,

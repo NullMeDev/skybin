@@ -1,7 +1,8 @@
 use crate::models::PatternMatch;
-use super::rules::PatternRule;
+use super::rules::{PatternRule, BUILTIN_PATTERNS};
 
 /// Detector for finding sensitive patterns in paste content
+#[derive(Clone)]
 pub struct PatternDetector {
     patterns: Vec<PatternRule>,
 }
@@ -10,6 +11,17 @@ impl PatternDetector {
     /// Create a new detector with the given patterns
     pub fn new(patterns: Vec<PatternRule>) -> Self {
         PatternDetector { patterns }
+    }
+
+    /// Load all built-in patterns
+    pub fn load_all() -> Self {
+        let patterns = BUILTIN_PATTERNS.values().cloned().collect();
+        PatternDetector { patterns }
+    }
+
+    /// Get the count of loaded patterns
+    pub fn pattern_count(&self) -> usize {
+        self.patterns.len()
     }
 
     /// Detect all matching patterns in content
