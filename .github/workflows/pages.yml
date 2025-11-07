@@ -1,0 +1,246 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dtolnay/rust-toolchain@stable
+      
+      - uses: Swatinem/rust-cache@v2
+      
+      - name: Generate documentation
+        run: cargo doc --no-deps --document-private-items
+        env:
+          RUSTDOCFLAGS: "--html-in-header /dev/null"
+      
+      - name: Build placeholder site
+        run: |
+          mkdir -p target/doc-site
+          cat > target/doc-site/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>SkyBin - Paste Vault Aggregator</title>
+            <style>
+              * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+              }
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+              }
+              header {
+                background: rgba(0, 0, 0, 0.1);
+                backdrop-filter: blur(10px);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                padding: 1rem 0;
+              }
+              nav {
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 0 2rem;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              }
+              nav h1 {
+                color: white;
+                font-size: 1.8rem;
+                font-weight: 700;
+              }
+              nav ul {
+                display: flex;
+                list-style: none;
+                gap: 2rem;
+              }
+              nav a {
+                color: white;
+                text-decoration: none;
+                transition: opacity 0.3s;
+              }
+              nav a:hover {
+                opacity: 0.8;
+              }
+              main {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 2rem;
+              }
+              .container {
+                max-width: 800px;
+                width: 100%;
+                background: white;
+                border-radius: 20px;
+                padding: 3rem;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                text-align: center;
+              }
+              .container h2 {
+                font-size: 2.5rem;
+                margin-bottom: 1rem;
+                color: #667eea;
+              }
+              .container p {
+                font-size: 1.1rem;
+                margin-bottom: 1.5rem;
+                color: #666;
+              }
+              .status-badge {
+                display: inline-block;
+                background: #10b981;
+                color: white;
+                padding: 0.5rem 1rem;
+                border-radius: 20px;
+                margin: 1rem 0;
+                font-weight: 600;
+              }
+              .features {
+                text-align: left;
+                margin: 2rem 0;
+                padding: 1.5rem;
+                background: #f9fafb;
+                border-radius: 10px;
+              }
+              .features li {
+                margin: 0.8rem 0;
+                margin-left: 1.5rem;
+              }
+              .cta-buttons {
+                display: flex;
+                gap: 1rem;
+                justify-content: center;
+                margin-top: 2rem;
+              }
+              .btn {
+                padding: 0.8rem 1.8rem;
+                border-radius: 10px;
+                border: none;
+                font-size: 1rem;
+                font-weight: 600;
+                cursor: pointer;
+                text-decoration: none;
+                transition: all 0.3s;
+                display: inline-block;
+              }
+              .btn-primary {
+                background: #667eea;
+                color: white;
+              }
+              .btn-primary:hover {
+                background: #5568d3;
+                transform: translateY(-2px);
+              }
+              .btn-secondary {
+                background: white;
+                color: #667eea;
+                border: 2px solid #667eea;
+              }
+              .btn-secondary:hover {
+                background: #667eea;
+                color: white;
+              }
+              footer {
+                background: rgba(0, 0, 0, 0.2);
+                color: white;
+                text-align: center;
+                padding: 2rem;
+                margin-top: auto;
+              }
+            </style>
+          </head>
+          <body>
+            <header>
+              <nav>
+                <h1>🔒 SkyBin</h1>
+                <ul>
+                  <li><a href="#about">About</a></li>
+                  <li><a href="/docs/paste_vault">Docs</a></li>
+                  <li><a href="https://github.com/NullMeDev/skybin">GitHub</a></li>
+                </ul>
+              </nav>
+            </header>
+            
+            <main>
+              <div class="container">
+                <h2>SkyBin - Paste Vault Aggregator</h2>
+                <p>A concurrent, pattern-matching paste aggregator built in Rust</p>
+                
+                <div class="status-badge">✓ Development Version</div>
+                
+                <div class="features">
+                  <strong>Features:</strong>
+                  <ul>
+                    <li>🔍 Multi-source paste aggregation</li>
+                    <li>🛡️ Advanced pattern detection (API keys, credentials, PII)</li>
+                    <li>⚡ High-performance concurrent scraping</li>
+                    <li>📊 Full-text search with FTS5</li>
+                    <li>🔐 Auto-purge and data retention policies</li>
+                    <li>🌐 REST API + Web interface</li>
+                  </ul>
+                </div>
+                
+                <div class="cta-buttons">
+                  <a href="https://github.com/NullMeDev/skybin" class="btn btn-primary">View on GitHub</a>
+                  <a href="/docs/paste_vault" class="btn btn-secondary">API Documentation</a>
+                </div>
+              </div>
+            </main>
+            
+            <footer>
+              <p>&copy; 2025 SkyBin. Built with Rust 🦀</p>
+              <p style="font-size: 0.9rem; margin-top: 0.5rem;">
+                <a href="https://github.com/NullMeDev/skybin" style="color: white; text-decoration: none;">GitHub Repository</a>
+              </p>
+            </footer>
+          </body>
+          </html>
+          EOF
+      
+      - name: Copy documentation
+        run: |
+          cp -r target/doc target/doc-site/docs 2>/dev/null || true
+      
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/doc-site
+
+  deploy:
+    name: Deploy to Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

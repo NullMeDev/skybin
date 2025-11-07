@@ -1,0 +1,64 @@
+[server]
+host = "0.0.0.0"
+port = 8080
+max_paste_size = 1_000_000  # 1MB max paste size
+
+[storage]
+db_path = "pastevault.db"
+retention_days = 7
+max_pastes = 10000
+
+[scraping]
+interval_seconds = 300  # 5 minutes
+concurrent_scrapers = 5
+jitter_min_ms = 500
+jitter_max_ms = 5000
+retries = 3
+backoff_ms = 500
+proxy = ""  # Optional: "http://proxy:port"
+
+user_agents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "PasteVault/1.0 (+https://github.com/pastevault)",
+]
+
+[sources]
+pastebin = true
+gists = true
+paste_ee = true
+rentry = false  # May have anti-scraping
+ghostbin = false  # Check if still operational
+slexy = true
+dpaste = true
+hastebin = false  # Many instances, specify if needed
+ubuntu_pastebin = false
+
+[apis]
+# Optional: Pastebin PRO API key for higher limits
+pastebin_api_key = ""
+# Optional: GitHub token for higher rate limits
+github_token = ""
+
+[patterns]
+# Toggle detection categories
+aws_keys = true
+credit_cards = true
+emails = true
+email_password_combos = true
+ip_cidr = true
+private_keys = true
+db_credentials = true
+generic_api_keys = true
+
+# Custom patterns
+[[patterns.custom]]
+name = "Example Custom Pattern"
+regex = "(?i)\\bsupersecret\\b"
+severity = "moderate"
+
+# [[patterns.custom]]
+# name = "Another Pattern"
+# regex = "password\\s*[:=]\\s*\\S+"
+# severity = "high"

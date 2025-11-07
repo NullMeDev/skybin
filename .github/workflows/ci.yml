@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dtolnay/rust-toolchain@stable
+      
+      - uses: Swatinem/rust-cache@v2
+      
+      - name: Run tests
+        run: cargo test --lib --verbose
+      
+      - name: Run doc tests
+        run: cargo test --doc
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      
+      - uses: Swatinem/rust-cache@v2
+      
+      - name: Run clippy
+        run: cargo clippy --lib -- -D warnings
+
+  build:
+    name: Build Release
+    runs-on: ubuntu-latest
+    needs: [test, fmt, clippy]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dtolnay/rust-toolchain@stable
+      
+      - uses: Swatinem/rust-cache@v2
+      
+      - name: Build release binary
+        run: cargo build --release --verbose
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: paste-vault-release
+          path: target/release/paste-vault
+          retention-days: 5
