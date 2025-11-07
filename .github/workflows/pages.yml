@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# Required permissions for GitHub Pages deployment
 permissions:
   contents: read
   pages: write
@@ -13,6 +14,11 @@ permissions:
 concurrency:
   group: "pages"
   cancel-in-progress: false
+
+# SETUP REQUIRED:
+# 1. Go to https://github.com/NullMeDev/skybin/settings/pages
+# 2. Under "Build and deployment" → Source: Select "GitHub Actions"
+# 3. Click "Save" to enable GitHub Pages with Actions
 
 jobs:
   build:
