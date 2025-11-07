@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyBin Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --dark: #1f2937;
+            --light: #f9fafb;
+            --border: #e5e7eb;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: var(--light);
+            color: var(--dark);
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 250px;
+            height: 100vh;
+            background: var(--dark);
+            color: white;
+            padding: 2rem 0;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+
+        .sidebar-header {
+            padding: 0 1.5rem 2rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .sidebar-nav {
+            margin-top: 2rem;
+        }
+
+        .nav-item {
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-left: 3px solid transparent;
+        }
+
+        .nav-item:hover,
+        .nav-item.active {
+            background: rgba(102, 126, 234, 0.1);
+            border-left-color: var(--primary);
+            color: var(--primary);
+        }
+
+        /* Main Content */
+        .main {
+            margin-left: 250px;
+            min-height: 100vh;
+        }
+
+        /* Top Bar */
+        .topbar {
+            background: white;
+            border-bottom: 1px solid var(--border);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .topbar-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .topbar-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        /* Content Area */
+        .content {
+            padding: 2rem;
+        }
+
+        /* Grid Layout */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            padding: 1.5rem;
+            transition: all 0.3s;
+        }
+
+        .card:hover {
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+
+        .card-title {
+            font-size: 0.9rem;
+            color: #6b7280;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .card-subtitle {
+            font-size: 0.85rem;
+            color: #9ca3af;
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-success { background: var(--success); color: white; }
+        .badge-warning { background: var(--warning); color: white; }
+        .badge-danger { background: var(--danger); color: white; }
+        .badge-info { background: var(--primary); color: white; }
+
+        /* Tables */
+        .table-container {
+            background: white;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: var(--light);
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+            color: #6b7280;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background: var(--light);
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--secondary);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: var(--light);
+            color: var(--dark);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--primary);
+        }
+
+        .btn-small {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem;
+        }
+
+        /* Search Box */
+        .search-box {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .search-box input {
+            flex: 1;
+            padding: 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        /* Chart Placeholder */
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            padding: 1.5rem;
+            min-height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #9ca3af;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .stat-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-number {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #6b7280;
+            margin-top: 0.5rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 200px;
+            }
+            .main {
+                margin-left: 0;
+            }
+            .content {
+                padding: 1rem;
+            }
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Animations */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .card {
+            animation: slideIn 0.3s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            🔒 SkyBin
+        </div>
+        <div class="sidebar-nav">
+            <div class="nav-item active">
+                📊 Dashboard
+            </div>
+            <div class="nav-item">
+                🔍 Search
+            </div>
+            <div class="nav-item">
+                ⚙️ Scrapers
+            </div>
+            <div class="nav-item">
+                📋 Patterns
+            </div>
+            <div class="nav-item">
+                📤 Upload
+            </div>
+            <div class="nav-item">
+                🔐 Admin
+            </div>
+            <div class="nav-item">
+                ⚙️ Settings
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main">
+        <!-- Top Bar -->
+        <div class="topbar">
+            <div class="topbar-title">Dashboard</div>
+            <div class="topbar-actions">
+                <button class="btn btn-secondary btn-small">🔄 Refresh</button>
+                <button class="btn btn-primary btn-small">➕ New Paste</button>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+            <!-- Statistics -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-number">1,247</div>
+                    <div class="stat-label">Total Pastes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">⚠️</div>
+                    <div class="stat-number">84</div>
+                    <div class="stat-label">Sensitive Found</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🔑</div>
+                    <div class="stat-number">23</div>
+                    <div class="stat-label">API Keys Detected</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">🔄</div>
+                    <div class="stat-number">Last 5m ago</div>
+                    <div class="stat-label">Last Scrape</div>
+                </div>
+            </div>
+
+            <!-- Main Grid -->
+            <div class="grid">
+                <!-- Pattern Distribution -->
+                <div class="card">
+                    <div class="card-title">Top Patterns Today</div>
+                    <div style="margin-top: 1rem;">
+                        <div style="margin-bottom: 1rem;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <span>API Keys</span>
+                                <span style="color: var(--primary);">42</span>
+                            </div>
+                            <div style="background: var(--light); height: 6px; border-radius: 3px; overflow: hidden;">
+                                <div style="background: var(--primary); height: 100%; width: 85%;"></div>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 1rem;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <span>Credentials</span>
+                                <span style="color: var(--warning);">28</span>
+                            </div>
+                            <div style="background: var(--light); height: 6px; border-radius: 3px; overflow: hidden;">
+                                <div style="background: var(--warning); height: 100%; width: 56%;"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <span>Private Keys</span>
+                                <span style="color: var(--danger);">14</span>
+                            </div>
+                            <div style="background: var(--light); height: 6px; border-radius: 3px; overflow: hidden;">
+                                <div style="background: var(--danger); height: 100%; width: 28%;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sources -->
+                <div class="card">
+                    <div class="card-title">Data Sources</div>
+                    <div style="margin-top: 1rem;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                            <span>Pastebin</span>
+                            <span class="badge badge-success">Active</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                            <span>GitHub Gists</span>
+                            <span class="badge badge-info">Pending</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Paste.ee</span>
+                            <span class="badge badge-warning">Starting</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Status -->
+                <div class="card">
+                    <div class="card-title">System Status</div>
+                    <div style="margin-top: 1rem;">
+                        <div style="margin-bottom: 1rem; display: flex; justify-content: space-between;">
+                            <span>Database Size</span>
+                            <span style="font-weight: 600;">245 MB</span>
+                        </div>
+                        <div style="margin-bottom: 1rem; display: flex; justify-content: space-between;">
+                            <span>Uptime</span>
+                            <span style="font-weight: 600;">8 days</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>CPU Usage</span>
+                            <span style="font-weight: 600;">2.3%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search and Recent Pastes -->
+            <h2 style="margin: 2rem 0 1rem; font-size: 1.25rem;">Recent Pastes</h2>
+            
+            <div class="search-box">
+                <input type="text" placeholder="Search by content, source, or pattern...">
+                <button class="btn btn-primary">Search</button>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Source</th>
+                            <th>Patterns Detected</th>
+                            <th>Severity</th>
+                            <th>Time</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>#1247</td>
+                            <td>Pastebin</td>
+                            <td>API Key, Credentials</td>
+                            <td><span class="badge badge-danger">Critical</span></td>
+                            <td>2 min ago</td>
+                            <td>
+                                <button class="btn btn-secondary btn-small">View</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>#1246</td>
+                            <td>Pastebin</td>
+                            <td>Private Key</td>
+                            <td><span class="badge badge-warning">High</span></td>
+                            <td>5 min ago</td>
+                            <td>
+                                <button class="btn btn-secondary btn-small">View</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>#1245</td>
+                            <td>Pastebin</td>
+                            <td>Email, IP Address</td>
+                            <td><span class="badge badge-info">Medium</span></td>
+                            <td>12 min ago</td>
+                            <td>
+                                <button class="btn btn-secondary btn-small">View</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
