@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3>Total Pastes</h3>
+        <div class="value" id="total-pastes">--</div>
+    </div>
+    
+    <div class="stat-card danger">
+        <h3>Sensitive Pastes</h3>
+        <div class="value" id="sensitive-pastes">--</div>
+    </div>
+    
+    <div class="stat-card warning">
+        <h3>Last 24 Hours</h3>
+        <div class="value" id="recent-pastes">--</div>
+    </div>
+</div>
+
+<div class="content-card">
+    <h3>Source Breakdown</h3>
+    <div id="source-stats" style="overflow-x: auto;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Count</th>
+                    <th>Percentage</th>
+                </tr>
+            </thead>
+            <tbody id="source-tbody">
+                <tr>
+                    <td colspan="3" style="text-align: center; color: #9ca3af;">Loading...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="content-card">
+    <h3>Recent Pastes</h3>
+    <div style="overflow-x: auto;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="recent-tbody">
+                <tr>
+                    <td colspan="5" style="text-align: center; color: #9ca3af;">Loading...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // Fetch statistics on page load
+    async function loadStatistics() {
+        try {
+            const response = await fetch('/api/stats');
+            const data = await response.json();
+            
+            if (data.success && data.data) {
+                const stats = data.data;
+                
+                // Update stat cards
+                document.getElementById('total-pastes').textContent = stats.total_pastes.toLocaleString();
+                document.getElementById('sensitive-pastes').textContent = stats.sensitive_pastes.toLocaleString();
+                document.getElementById('recent-pastes').textContent = stats.recent_count.toLocaleString();
+                
+                // Update source breakdown
+                const sourceRows = Object.entries(stats.by_source)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([source, count]) => {
+                        const percentage = ((count / stats.total_pastes) * 100).toFixed(1);
+                        return `
+                            <tr>
+                                <td><strong>${source}</strong></td>
+                                <td>${count}</td>
+                                <td>${percentage}%</td>
+                            </tr>
+                        `;
+                    })
+                    .join('');
+                
+                document.getElementById('source-tbody').innerHTML = sourceRows || '<tr><td colspan="3" style="text-align: center; color: #9ca3af;">No data yet</td></tr>';
+            }
+        } catch (error) {
+            console.error('Failed to load statistics:', error);
+        }
+    }
+    
+    // Fetch recent pastes
+    async function loadRecentPastes() {
+        try {
+            const response = await fetch('/api/pastes');
+            const data = await response.json();
+            
+            if (data.success && data.data) {
+                const pastes = data.data.slice(0, 10);
+                
+                const pasteRows = pastes.map(paste => {
+                    const date = new Date(paste.created_at * 1000).toLocaleDateString();
+                    const sensitiveClass = paste.is_sensitive ? 'badge-danger' : 'badge-success';
+                    const sensitiveText = paste.is_sensitive ? 'SENSITIVE' : 'SAFE';
+                    const title = paste.title || '(No Title)';
+                    
+                    return `
+                        <tr>
+                            <td>${title}</td>
+                            <td>${paste.source}</td>
+                            <td><span class="badge ${sensitiveClass}">${sensitiveText}</span></td>
+                            <td>${date}</td>
+                            <td><a href="/paste/${paste.id}" class="btn btn-primary btn-small">View</a></td>
+                        </tr>
+                    `;
+                }).join('');
+                
+                document.getElementById('recent-tbody').innerHTML = pasteRows || '<tr><td colspan="5" style="text-align: center; color: #9ca3af;">No pastes yet</td></tr>';
+            }
+        } catch (error) {
+            console.error('Failed to load recent pastes:', error);
+        }
+    }
+    
+    // Load data on page load
+    loadStatistics();
+    loadRecentPastes();
+    
+    // Refresh every 30 seconds
+    setInterval(loadStatistics, 30000);
+    setInterval(loadRecentPastes, 30000);
+</script>
+{% endblock %}

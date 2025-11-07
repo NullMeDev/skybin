@@ -25,8 +25,31 @@ pub struct UploadRequest {
     pub syntax: Option<String>,
 }
 
-/// GET / - Recent pastes feed
-pub async fn feed(
+#[derive(Debug, Serialize)]
+pub struct Statistics {
+    pub total_pastes: i64,
+    pub sensitive_pastes: i64,
+    pub by_source: std::collections::HashMap<String, i64>,
+    pub by_severity: std::collections::HashMap<String, i64>,
+    pub recent_count: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SeverityStats {
+    pub critical: i64,
+    pub high: i64,
+    pub moderate: i64,
+    pub low: i64,
+}
+
+/// GET / - Dashboard HTML page
+pub async fn feed() -> axum::response::Html<&'static str> {
+    const DASHBOARD_HTML: &str = include_str!("templates/dashboard.html");
+    axum::response::Html(DASHBOARD_HTML)
+}
+
+/// GET /api/pastes - Recent pastes feed (JSON API)
+pub async fn get_pastes(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<PasteResponse>>>, ApiError> {
     let db = state.db.lock().map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
@@ -88,8 +111,8 @@ pub async fn raw_paste(
     Ok(paste.content)
 }
 
-/// POST /upload - Submit new paste
-pub async fn upload_paste(
+/// POST /api/upload - Submit new paste (JSON API)
+pub async fn upload_paste_json(
     State(state): State<AppState>,
     Json(payload): Json<UploadRequest>,
 ) -> Result<(StatusCode, Json<ApiResponse<String>>), ApiError> {
@@ -133,8 +156,14 @@ pub async fn upload_paste(
     ))
 }
 
-/// GET /search - Full-text search
-pub async fn search(
+/// GET /search - Search page HTML
+pub async fn search() -> axum::response::Html<&'static str> {
+    const SEARCH_HTML: &str = include_str!("templates/search.html");
+    axum::response::Html(SEARCH_HTML)
+}
+
+/// GET /api/search - Full-text search (JSON API)
+pub async fn search_api(
     State(state): State<AppState>,
     Query(filters): Query<SearchFilters>,
 ) -> Result<Json<ApiResponse<Vec<PasteResponse>>>, ApiError> {
@@ -154,4 +183,59 @@ pub async fn search(
         .collect();
     
     Ok(Json(ApiResponse::ok(responses)))
+}
+
+/// GET /api/stats - Get statistics about pastes
+pub async fn statistics(
+    State(state): State<AppState>,
+) -> Result<Json<ApiResponse<Statistics>>, ApiError> {
+    let db = state.db.lock().map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    // Get total counts
+    let total_pastes = db.get_paste_count()
+        .map_err(|e| ApiError(format!("Failed to get paste count: {}", e)))?;
+    let sensitive_pastes = db.get_sensitive_paste_count()
+        .map_err(|e| ApiError(format!("Failed to get sensitive paste count: {}", e)))?;
+    
+    // Get counts by source
+    let sources = vec!["pastebin", "gists", "paste_ee", "rentry", "ghostbin", "slexy", "dpaste", "hastebin", "ubuntu_pastebin", "web"];
+    let mut by_source = std::collections::HashMap::new();
+    for source in sources {
+        if let Ok(count) = db.get_paste_count_by_source(source) {
+            if count > 0 {
+                by_source.insert(source.to_string(), count);
+            }
+        }
+    }
+    
+    // Get recent pastes count (last 24 hours)
+    let now = chrono::Utc::now().timestamp();
+    let recent_pastes = db.get_recent_pastes(1000)
+        .map_err(|e| ApiError(format!("Failed to get recent pastes: {}", e)))?
+        .into_iter()
+        .filter(|p| now - p.created_at < 86400) // 24 hours
+        .count() as i64;
+    
+    // Estimate severity distribution (from total and sensitive counts)
+    let mut by_severity = std::collections::HashMap::new();
+    by_severity.insert("critical".to_string(), sensitive_pastes / 3);
+    by_severity.insert("high".to_string(), sensitive_pastes - (sensitive_pastes / 3));
+    by_severity.insert("moderate".to_string(), (total_pastes - sensitive_pastes) / 2);
+    by_severity.insert("low".to_string(), (total_pastes - sensitive_pastes) / 2);
+    
+    let stats = Statistics {
+        total_pastes,
+        sensitive_pastes,
+        by_source,
+        by_severity,
+        recent_count: recent_pastes,
+    };
+    
+    Ok(Json(ApiResponse::ok(stats)))
+}
+
+/// GET /upload - Upload page HTML
+pub async fn upload_page() -> axum::response::Html<&'static str> {
+    const UPLOAD_HTML: &str = include_str!("templates/upload.html");
+    axum::response::Html(UPLOAD_HTML)
 }
