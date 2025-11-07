@@ -35,6 +35,10 @@ impl Scheduler {
 
     /// Process and store a discovered paste
     pub fn process_paste(&mut self, discovered: crate::models::DiscoveredPaste) -> anyhow::Result<()> {
+        // Anonymize the paste before storing (strip authors, URLs, etc)
+        let anonymization_config = crate::anonymization::AnonymizationConfig::default();
+        let discovered = crate::anonymization::anonymize_discovered_paste(discovered, &anonymization_config);
+        
         // Compute content hash
         let content_hash = hash::compute_hash_normalized(&discovered.content);
 

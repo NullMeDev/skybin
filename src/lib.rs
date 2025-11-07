@@ -1,3 +1,4 @@
+pub mod anonymization;
 pub mod config;
 pub mod db;
 pub mod hash;

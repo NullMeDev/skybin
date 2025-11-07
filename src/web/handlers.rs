@@ -132,14 +132,25 @@ pub async fn upload_paste_json(
         return Err(ApiError("Content cannot be empty".to_string()));
     }
     
-    // Create paste
+    // Anonymize user submission (sanitize title, remove any PII)
+    let mut title = payload.title;
+    if let Some(t) = &title {
+        // Sanitize title to remove emails, URLs, usernames
+        let sanitized = t
+            .replace(|c: char| c == '@', "")
+            .replace("http://", "")
+            .replace("https://", "");
+        title = if sanitized.is_empty() { None } else { Some(sanitized) };
+    }
+    
+    // Create paste (author is always None for complete anonymity)
     let now = Utc::now().timestamp();
     let content_hash = crate::hash::compute_hash_normalized(&payload.content);
     let paste = crate::models::Paste {
         id: Uuid::new_v4().to_string(),
         source: "web".to_string(),
         source_id: None,
-        title: payload.title,
+        title,
         author: None,
         content: payload.content,
         content_hash,
