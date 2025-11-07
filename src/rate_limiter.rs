@@ -36,6 +36,8 @@ pub struct SourceRateLimiter {
     limiters: Arc<Mutex<HashMap<String, SimpleRateLimiter>>>,
     jitter_min_ms: u64,
     jitter_max_ms: u64,
+    /// Per-source request rate limits (requests per second)
+    source_limits: Arc<HashMap<String, u32>>,
 }
 
 impl SourceRateLimiter {
@@ -45,6 +47,21 @@ impl SourceRateLimiter {
             limiters: Arc::new(Mutex::new(HashMap::new())),
             jitter_min_ms,
             jitter_max_ms,
+            source_limits: Arc::new(HashMap::new()),
+        }
+    }
+
+    /// Create with source-specific rate limits
+    pub fn with_source_limits(
+        jitter_min_ms: u64,
+        jitter_max_ms: u64,
+        source_limits: HashMap<String, u32>,
+    ) -> Self {
+        SourceRateLimiter {
+            limiters: Arc::new(Mutex::new(HashMap::new())),
+            jitter_min_ms,
+            jitter_max_ms,
+            source_limits: Arc::new(source_limits),
         }
     }
 
@@ -53,11 +70,18 @@ impl SourceRateLimiter {
         SourceRateLimiter::new(500, 5000)
     }
 
+    /// Create with default jitter and source-specific rate limits
+    pub fn default_with_source_limits(source_limits: HashMap<String, u32>) -> Self {
+        SourceRateLimiter::with_source_limits(500, 5000, source_limits)
+    }
+
     /// Check if a request is allowed for the source (without blocking)
     pub fn check_rate_limit(&self, source: &str) -> bool {
         let mut limiters = self.limiters.lock().unwrap();
+        // Get source-specific rate limit, default to 1 req/sec if not configured
+        let rate = self.source_limits.get(source).copied().unwrap_or(1);
         limiters.entry(source.to_string())
-            .or_insert_with(|| SimpleRateLimiter::new(1))
+            .or_insert_with(|| SimpleRateLimiter::new(rate))
             .check_and_update()
     }
 
@@ -236,5 +260,34 @@ mod tests {
         limiter.wait_rate_limit("test").await;
         // If we get here, the test passed
         assert!(true);
+    }
+
+    #[test]
+    fn test_per_source_rate_limits() {
+        use std::collections::HashMap;
+        
+        let mut limits = HashMap::new();
+        limits.insert("pastebin".to_string(), 2); // 2 req/sec
+        limits.insert("gists".to_string(), 5); // 5 req/sec
+        
+        let limiter = SourceRateLimiter::with_source_limits(100, 200, limits);
+        
+        // Pastebin gets 2 req/sec, gists gets 5 req/sec, unknown gets 1 req/sec
+        assert!(limiter.check_rate_limit("pastebin"));
+        assert!(limiter.check_rate_limit("gists"));
+        assert!(limiter.check_rate_limit("unknown"));
+    }
+
+    #[test]
+    fn test_default_with_source_limits() {
+        use std::collections::HashMap;
+        
+        let mut limits = HashMap::new();
+        limits.insert("test".to_string(), 10);
+        
+        let limiter = SourceRateLimiter::default_with_source_limits(limits);
+        assert_eq!(limiter.jitter_min_ms, 500);
+        assert_eq!(limiter.jitter_max_ms, 5000);
+        assert_eq!(limiter.source_limits.get("test"), Some(&10));
     }
 }
