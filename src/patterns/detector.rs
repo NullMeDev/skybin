@@ -19,6 +19,13 @@ impl PatternDetector {
         PatternDetector { patterns }
     }
 
+    /// Load patterns from configuration
+    pub fn load_from_config(config: &crate::config::Config) -> Self {
+        use super::rules::get_enabled_patterns;
+        let patterns = get_enabled_patterns(&config.patterns, &config.patterns.custom);
+        PatternDetector { patterns }
+    }
+
     /// Get the count of loaded patterns
     pub fn pattern_count(&self) -> usize {
         self.patterns.len()

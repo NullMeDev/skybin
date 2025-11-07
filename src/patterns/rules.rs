@@ -211,9 +211,14 @@ pub fn get_enabled_patterns(config: &crate::config::PatternsConfig, custom_patte
 
     if config.aws_keys {
         patterns.push(BUILTIN_PATTERNS["aws_key"].clone());
+        patterns.push(BUILTIN_PATTERNS["aws_account_id"].clone());
     }
-    if config.aws_keys {
+    if config.generic_api_keys {
         patterns.push(BUILTIN_PATTERNS["generic_api_key"].clone());
+        patterns.push(BUILTIN_PATTERNS["stripe_key"].clone());
+        patterns.push(BUILTIN_PATTERNS["github_token"].clone());
+        patterns.push(BUILTIN_PATTERNS["mailchimp_key"].clone());
+        patterns.push(BUILTIN_PATTERNS["slack_webhook"].clone());
     }
     if config.private_keys {
         patterns.push(BUILTIN_PATTERNS["ssh_private_key"].clone());
@@ -231,7 +236,6 @@ pub fn get_enabled_patterns(config: &crate::config::PatternsConfig, custom_patte
     }
     if config.ip_cidr {
         patterns.push(BUILTIN_PATTERNS["private_ip_cidr"].clone());
-        patterns.push(BUILTIN_PATTERNS["aws_account_id"].clone());
     }
 
     // Add custom patterns

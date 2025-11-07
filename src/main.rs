@@ -31,9 +31,12 @@ async fn main() -> anyhow::Result<()> {
     );
     println!("✓ Rate limiter configured");
 
-    // Create pattern detector
-    let detector = PatternDetector::load_all();
+    // Create pattern detector from config
+    let detector = PatternDetector::load_from_config(&config);
     println!("✓ Pattern detector initialized with {} patterns", detector.pattern_count());
+    if detector.pattern_count() == 0 {
+        tracing::warn!("⚠️  No patterns enabled in config!");
+    }
 
     // Create scheduler for processing pastes
     let scraper_interval = config.scraping.interval_seconds;
