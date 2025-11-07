@@ -70,8 +70,14 @@ pub async fn get_pastes(
     Ok(Json(ApiResponse::ok(responses)))
 }
 
-/// GET /paste/:id - View individual paste
-pub async fn view_paste(
+/// GET /paste/:id - View individual paste (HTML page)
+pub async fn view_paste() -> axum::response::Html<&'static str> {
+    const PASTE_DETAIL_HTML: &str = include_str!("templates/paste_detail.html");
+    axum::response::Html(PASTE_DETAIL_HTML)
+}
+
+/// GET /api/paste/:id - View individual paste (JSON API)
+pub async fn get_paste(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<PasteResponse>>, ApiError> {

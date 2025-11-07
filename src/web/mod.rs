@@ -70,7 +70,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/search", get(handlers::search_api))
         .route("/api/stats", get(handlers::statistics))
         .route("/api/health", get(health_check))
-        .route("/api/paste/:id", get(handlers::view_paste))
+        .route("/api/paste/:id", get(handlers::get_paste))
         
         // POST endpoints
         .route("/api/upload", post(handlers::upload_paste_json))
