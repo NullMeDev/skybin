@@ -32,7 +32,12 @@ pub struct PatternRule {
 }
 
 impl PatternRule {
-    pub fn new(name: impl Into<String>, pattern: &str, severity: Severity, category: impl Into<String>) -> Result<Self, regex::Error> {
+    pub fn new(
+        name: impl Into<String>,
+        pattern: &str,
+        severity: Severity,
+        category: impl Into<String>,
+    ) -> Result<Self, regex::Error> {
         Ok(PatternRule {
             name: name.into(),
             regex: Regex::new(pattern)?,
@@ -206,7 +211,10 @@ lazy_static! {
 }
 
 /// Get all enabled patterns based on configuration
-pub fn get_enabled_patterns(config: &crate::config::PatternsConfig, custom_patterns: &[crate::config::CustomPattern]) -> Vec<PatternRule> {
+pub fn get_enabled_patterns(
+    config: &crate::config::PatternsConfig,
+    custom_patterns: &[crate::config::CustomPattern],
+) -> Vec<PatternRule> {
     let mut patterns = Vec::new();
 
     if config.aws_keys {
@@ -240,7 +248,12 @@ pub fn get_enabled_patterns(config: &crate::config::PatternsConfig, custom_patte
 
     // Add custom patterns
     for custom in custom_patterns {
-        if let Ok(rule) = PatternRule::new(&custom.name, &custom.regex, parse_severity(&custom.severity), "custom") {
+        if let Ok(rule) = PatternRule::new(
+            &custom.name,
+            &custom.regex,
+            parse_severity(&custom.severity),
+            "custom",
+        ) {
             patterns.push(rule);
         }
     }

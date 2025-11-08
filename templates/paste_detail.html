@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="content-card">
+    <div style="margin-bottom: 20px;">
+        <h2 id="paste-title" style="margin: 0 0 10px 0;">Loading...</h2>
+        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
+            <span class="badge badge-info" id="paste-source">Loading...</span>
+            <span style="color: #6b7280; font-size: 14px;">
+                Created: <span id="paste-date">--</span>
+            </span>
+        </div>
+    </div>
+    
+    <div style="border-top: 1px solid #e5e7eb; padding-top: 15px;">
+        <div style="background: #f3f4f6; padding: 10px 15px; border-radius: 6px; margin-bottom: 15px;">
+            <p style="margin: 0; color: #4b5563; font-weight: 600;">
+                Language: <span id="paste-syntax" style="color: #1f2937;">plaintext</span>
+            </p>
+        </div>
+        
+        <div id="pattern-alerts" style="margin-bottom: 20px;"></div>
+        
+        <div style="background: #1f2937; color: #e5e7eb; padding: 15px; border-radius: 6px; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.6;" id="paste-content">
+            Loading...
+        </div>
+        
+        <div style="margin-top: 15px;">
+            <button id="copy-btn" class="btn btn-primary" onclick="copyToClipboard()">Copy to Clipboard</button>
+        </div>
+    </div>
+</div>
+
+<div class="content-card" id="metadata-section" style="display: none;">
+    <h3>Metadata</h3>
+    <table class="table">
+        <tr>
+            <td><strong>Paste ID:</strong></td>
+            <td><code id="paste-id">--</code></td>
+        </tr>
+        <tr>
+            <td><strong>Content Hash:</strong></td>
+            <td><code id="paste-hash">--</code></td>
+        </tr>
+        <tr>
+            <td><strong>Author:</strong></td>
+            <td id="paste-author">--</td>
+        </tr>
+        <tr>
+            <td><strong>URL:</strong></td>
+            <td id="paste-url">--</td>
+        </tr>
+    </table>
+</div>
+
+<script>
+    // Extract paste ID from URL
+    const pasteId = window.location.pathname.split('/').pop();
+    
+    async function loadPaste() {
+        try {
+            const response = await fetch(`/api/paste/${pasteId}`);
+            const data = await response.json();
+            
+            if (data.success && data.data) {
+                const paste = data.data;
+                
+                // Update title and metadata
+                document.getElementById('paste-title').textContent = paste.title || '(No Title)';
+                document.getElementById('paste-source').textContent = paste.source.toUpperCase();
+                document.getElementById('paste-date').textContent = new Date(paste.created_at * 1000).toLocaleString();
+                document.getElementById('paste-views').textContent = paste.view_count || 0;
+                document.getElementById('paste-syntax').textContent = paste.syntax;
+                document.getElementById('paste-id').textContent = paste.id;
+                document.getElementById('raw-link').href = `/raw/${paste.id}`;
+                
+                
+                // Display pattern alerts if sensitive
+                if (paste.is_sensitive) {
+                    const alertHtml = `
+                        <div class="alert alert-danger">
+                            <strong>Warning:</strong> This paste contains sensitive data patterns including potential credentials, API keys, or private information.
+                        </div>
+                    `;
+                    document.getElementById('pattern-alerts').innerHTML = alertHtml;
+                }
+                
+                // Display content
+                document.getElementById('paste-content').textContent = paste.content || '(Empty)';
+                
+                // Show or hide metadata section based on availability
+                const metadataSection = document.getElementById('metadata-section');
+                if (paste.id) {
+                    metadataSection.style.display = 'block';
+                }
+            } else {
+                document.getElementById('paste-content').innerHTML = '<div style="color: #ef4444;">Paste not found</div>';
+            }
+        } catch (error) {
+            document.getElementById('paste-content').innerHTML = `<div style="color: #ef4444;">Error loading paste: ${error.message}</div>`;
+        }
+    }
+    
+    function copyToClipboard() {
+        const content = document.getElementById('paste-content').textContent;
+        navigator.clipboard.writeText(content).then(() => {
+            const btn = document.getElementById('copy-btn');
+            const originalText = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(() => {
+                btn.textContent = originalText;
+            }, 2000);
+        }).catch(err => {
+            alert('Failed to copy: ' + err);
+        });
+    }
+    
+    // Load paste on page load
+    loadPaste();
+</script>
+{% endblock %}

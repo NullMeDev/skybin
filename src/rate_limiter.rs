@@ -1,6 +1,6 @@
 use rand::Rng;
-use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 /// Simple rate limiter using timestamps
@@ -21,7 +21,11 @@ impl SimpleRateLimiter {
 
     fn check_and_update(&mut self) -> bool {
         let now = SystemTime::now();
-        if now.duration_since(self.last_request).unwrap_or(Duration::ZERO) >= self.interval {
+        if now
+            .duration_since(self.last_request)
+            .unwrap_or(Duration::ZERO)
+            >= self.interval
+        {
             self.last_request = now;
             true
         } else {
@@ -80,7 +84,8 @@ impl SourceRateLimiter {
         let mut limiters = self.limiters.lock().unwrap();
         // Get source-specific rate limit, default to 1 req/sec if not configured
         let rate = self.source_limits.get(source).copied().unwrap_or(1);
-        limiters.entry(source.to_string())
+        limiters
+            .entry(source.to_string())
             .or_insert_with(|| SimpleRateLimiter::new(rate))
             .check_and_update()
     }
@@ -88,14 +93,14 @@ impl SourceRateLimiter {
     /// Wait until a request is allowed (blocking with jitter)
     pub async fn wait_rate_limit(&self, source: &str) {
         let jitter = self.random_jitter();
-        
+
         loop {
             if self.check_rate_limit(source) {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        
+
         // Add jitter delay
         tokio::time::sleep(jitter).await;
     }
@@ -185,10 +190,10 @@ mod tests {
     #[test]
     fn test_rate_limit_check() {
         let limiter = SourceRateLimiter::new(100, 200);
-        
+
         // First request should be allowed
         assert!(limiter.check_rate_limit("test"));
-        
+
         // Second request immediately should be denied (1 req/sec)
         assert!(!limiter.check_rate_limit("test"));
     }
@@ -196,11 +201,11 @@ mod tests {
     #[test]
     fn test_multiple_sources() {
         let limiter = SourceRateLimiter::new(100, 200);
-        
+
         // Different sources should have independent limits
         assert!(limiter.check_rate_limit("source1"));
         assert!(limiter.check_rate_limit("source2"));
-        
+
         // Both should reject immediate second request
         assert!(!limiter.check_rate_limit("source1"));
         assert!(!limiter.check_rate_limit("source2"));
@@ -209,19 +214,19 @@ mod tests {
     #[test]
     fn test_exponential_backoff() {
         let mut backoff = ExponentialBackoff::new(100, 1000, 3);
-        
+
         assert!(backoff.can_retry());
         assert_eq!(backoff.next_backoff(), Some(Duration::from_millis(100)));
         assert_eq!(backoff.current_retry, 1);
-        
+
         assert!(backoff.can_retry());
         assert_eq!(backoff.next_backoff(), Some(Duration::from_millis(200)));
         assert_eq!(backoff.current_retry, 2);
-        
+
         assert!(backoff.can_retry());
         assert_eq!(backoff.next_backoff(), Some(Duration::from_millis(400)));
         assert_eq!(backoff.current_retry, 3);
-        
+
         assert!(!backoff.can_retry());
         assert_eq!(backoff.next_backoff(), None);
     }
@@ -229,12 +234,12 @@ mod tests {
     #[test]
     fn test_exponential_backoff_max_cap() {
         let mut backoff = ExponentialBackoff::new(100, 500, 10);
-        
+
         // Should cap at max_ms
         for _ in 0..5 {
             backoff.next_backoff();
         }
-        
+
         let final_backoff = backoff.next_backoff().unwrap();
         assert!(final_backoff.as_millis() <= 500);
     }
@@ -242,11 +247,11 @@ mod tests {
     #[test]
     fn test_exponential_backoff_reset() {
         let mut backoff = ExponentialBackoff::new(100, 1000, 3);
-        
+
         backoff.next_backoff();
         backoff.next_backoff();
         assert_eq!(backoff.current_retry, 2);
-        
+
         backoff.reset();
         assert_eq!(backoff.current_retry, 0);
         assert!(backoff.can_retry());
@@ -255,7 +260,7 @@ mod tests {
     #[tokio::test]
     async fn test_wait_rate_limit() {
         let limiter = SourceRateLimiter::new(10, 50);
-        
+
         // Should not hang and should eventually allow request
         limiter.wait_rate_limit("test").await;
         // If we get here, the test passed
@@ -265,13 +270,13 @@ mod tests {
     #[test]
     fn test_per_source_rate_limits() {
         use std::collections::HashMap;
-        
+
         let mut limits = HashMap::new();
         limits.insert("pastebin".to_string(), 2); // 2 req/sec
         limits.insert("gists".to_string(), 5); // 5 req/sec
-        
+
         let limiter = SourceRateLimiter::with_source_limits(100, 200, limits);
-        
+
         // Pastebin gets 2 req/sec, gists gets 5 req/sec, unknown gets 1 req/sec
         assert!(limiter.check_rate_limit("pastebin"));
         assert!(limiter.check_rate_limit("gists"));
@@ -281,10 +286,10 @@ mod tests {
     #[test]
     fn test_default_with_source_limits() {
         use std::collections::HashMap;
-        
+
         let mut limits = HashMap::new();
         limits.insert("test".to_string(), 10);
-        
+
         let limiter = SourceRateLimiter::default_with_source_limits(limits);
         assert_eq!(limiter.jitter_min_ms, 500);
         assert_eq!(limiter.jitter_max_ms, 5000);

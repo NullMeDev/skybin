@@ -1,34 +1,21 @@
 use super::traits::{Scraper, ScraperResult};
 use crate::models::DiscoveredPaste;
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
-struct PastebinItem {
-    key: String,
-    title: Option<String>,
-    user: Option<String>,
-    size: String,
-    expire_date: Option<i64>,
-    private: String,
-    syntax: Option<String>,
-    created: i64,
-}
-
-/// Pastebin scraper using the public API
+/// Pastebin scraper using archive page
 pub struct PastebinScraper {
-    api_url: String,
+    archive_url: String,
 }
 
 impl PastebinScraper {
     pub fn new() -> Self {
         PastebinScraper {
-            api_url: "https://scrape.pastebin.com/api_scraping.php".to_string(),
+            archive_url: "https://pastebin.com/archive".to_string(),
         }
     }
 
     pub fn with_url(url: String) -> Self {
-        PastebinScraper { api_url: url }
+        PastebinScraper { archive_url: url }
     }
 }
 
@@ -45,25 +32,69 @@ impl Scraper for PastebinScraper {
     }
 
     async fn fetch_recent(&self, client: &reqwest::Client) -> ScraperResult<Vec<DiscoveredPaste>> {
+        // Fetch archive page HTML
         let response = client
-            .get(&self.api_url)
-            .query(&[("limit", "10")])
+            .get(&self.archive_url)
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            )
             .send()
             .await?;
 
-        let items: Vec<PastebinItem> = response.json().await?;
+        if !response.status().is_success() {
+            return Err(crate::scrapers::ScraperError::SourceUnavailable(format!(
+                "Pastebin archive returned {}",
+                response.status()
+            )));
+        }
 
-        let pastes = items
-            .into_iter()
-            .map(|item| {
-                DiscoveredPaste::new("pastebin", &item.key, format!("Pastebin-{}", item.key))
-                    .with_title(item.title.unwrap_or_default())
-                    .with_author(item.user.unwrap_or_default())
-                    .with_url(format!("https://pastebin.com/{}", item.key))
-                    .with_syntax(item.syntax.unwrap_or_else(|| "text".to_string()))
-                    .with_created_at(item.created)
-            })
-            .collect();
+        let html = response.text().await?;
+        let mut pastes = Vec::new();
+
+        // Extract paste IDs from archive page using regex
+        // Format: <a href="/PASTE_ID">Title</a>
+        let re = regex::Regex::new(r#"<a href="/([a-zA-Z0-9]{8})"[^>]*>([^<]+)</a>"#).unwrap();
+
+        for cap in re.captures_iter(&html).take(10) {
+            let paste_id = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+            let title = cap.get(2).map(|m| m.as_str()).unwrap_or("Untitled");
+
+            if paste_id.is_empty() {
+                continue;
+            }
+
+            // Fetch actual paste content
+            let raw_url = format!("https://pastebin.com/raw/{}", paste_id);
+            match client
+                .get(&raw_url)
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                )
+                .send()
+                .await
+            {
+                Ok(content_response) => {
+                    if content_response.status().is_success() {
+                        if let Ok(content) = content_response.text().await {
+                            if !content.is_empty() && content.len() < 100000 {
+                                // Skip huge pastes
+                                let paste = DiscoveredPaste::new("pastebin", paste_id, content)
+                                    .with_title(title.to_string())
+                                    .with_url(format!("https://pastebin.com/{}", paste_id))
+                                    .with_syntax("plaintext".to_string());
+                                pastes.push(paste);
+                            }
+                        }
+                    }
+                }
+                Err(_) => continue,
+            }
+
+            // Rate limit: small delay between requests
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        }
 
         Ok(pastes)
     }
@@ -87,8 +118,8 @@ mod tests {
 
     #[test]
     fn test_pastebin_custom_url() {
-        let custom_url = "https://custom.api.pastebin.com".to_string();
+        let custom_url = "https://custom.pastebin.com/archive".to_string();
         let scraper = PastebinScraper::with_url(custom_url.clone());
-        assert_eq!(scraper.api_url, custom_url);
+        assert_eq!(scraper.archive_url, custom_url);
     }
 }

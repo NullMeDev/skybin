@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="content-card">
+    <h3>Submit a Paste</h3>
+    
+    <form id="uploadForm" style="max-width: 800px;">
+        <div class="form-group">
+            <label for="title">Title (Optional)</label>
+            <input type="text" id="title" name="title" placeholder="Give your paste a title..." maxlength="255">
+        </div>
+        
+        <div class="form-group">
+            <label for="content">Content</label>
+            <textarea id="content" name="content" placeholder="Paste your content here..." required></textarea>
+        </div>
+        
+        
+        <div style="display: flex; gap: 10px;">
+            <button type="submit" class="btn btn-primary">Submit Paste</button>
+            <button type="reset" class="btn btn-secondary">Clear</button>
+        </div>
+    </form>
+    
+    <div id="message" style="margin-top: 20px;"></div>
+</div>
+
+<div class="content-card" style="max-width: 800px;">
+    <h3>Features</h3>
+    <ul style="margin-left: 20px; line-height: 2;">
+        <li><strong>Anonymous Submission</strong> - No account needed</li>
+        <li><strong>Auto-Deletion</strong> - Pastes expire after 7 days</li>
+        <li><strong>Pattern Detection</strong> - Automatically detects sensitive data</li>
+        <li><strong>Language Detection</strong> - Automatically detects code language</li>
+        <li><strong>Fast Search</strong> - Full-text search across all pastes</li>
+    </ul>
+</div>
+
+<script>
+    const form = document.getElementById('uploadForm');
+    const messageDiv = document.getElementById('message');
+    
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = {
+            title: document.getElementById('title').value || null,
+            content: document.getElementById('content').value
+        };
+        
+        if (!formData.content.trim()) {
+            showMessage('Content cannot be empty', 'alert-danger');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/upload', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                const pasteId = data.data;
+                showMessage(`✓ Paste submitted successfully! <a href="/paste/${pasteId}" style="color: #3b82f6; font-weight: bold;">View it here</a>`, 'alert-success');
+                form.reset();
+            } else {
+                showMessage(`Error: ${data.error || 'Failed to submit paste'}`, 'alert-danger');
+            }
+        } catch (error) {
+            showMessage(`Error: ${error.message}`, 'alert-danger');
+        }
+    });
+    
+    function showMessage(text, className) {
+        messageDiv.innerHTML = `<div class="alert ${className}">${text}</div>`;
+        messageDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+</script>
+{% endblock %}

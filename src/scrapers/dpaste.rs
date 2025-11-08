@@ -111,9 +111,7 @@ impl Scraper for DPasteScraper {
             };
 
             // Create title from provided title or use ID
-            let title = item
-                .title
-                .unwrap_or_else(|| format!("DPaste-{}", item.id));
+            let title = item.title.unwrap_or_else(|| format!("DPaste-{}", item.id));
 
             // Note: We intentionally don't set author here - it will be None before storage
             // This is per anonymization requirements
@@ -123,10 +121,7 @@ impl Scraper for DPasteScraper {
                     item.url
                         .unwrap_or_else(|| format!("https://dpaste.com/{}", item.id)),
                 )
-                .with_syntax(
-                    item.syntax
-                        .unwrap_or_else(|| "text".to_string()),
-                )
+                .with_syntax(item.syntax.unwrap_or_else(|| "text".to_string()))
                 .with_created_at(
                     // Parse ISO 8601 timestamp if available
                     item.created

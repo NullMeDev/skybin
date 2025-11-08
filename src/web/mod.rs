@@ -64,17 +64,14 @@ pub fn create_router(state: AppState) -> Router {
         .route("/upload", get(handlers::upload_page))
         .route("/paste/:id", get(handlers::view_paste))
         .route("/raw/:id", get(handlers::raw_paste))
-        
         // API endpoints
         .route("/api/pastes", get(handlers::get_pastes))
         .route("/api/search", get(handlers::search_api))
         .route("/api/stats", get(handlers::statistics))
         .route("/api/health", get(health_check))
         .route("/api/paste/:id", get(handlers::get_paste))
-        
         // POST endpoints
         .route("/api/upload", post(handlers::upload_paste_json))
-        
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB limit
         .layer(CompressionLayer::new())
         .with_state(state)

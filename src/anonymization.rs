@@ -1,11 +1,10 @@
 /// Anonymization utilities for protecting user privacy
-/// 
+///
 /// This module ensures that all data stored in SkyBin is completely anonymous:
 /// - User-submitted pastes: author names are stripped
 /// - Scraped pastes: author names and URLs are anonymized
 /// - No IP addresses or user identifiers are stored
 /// - No personal information is retained
-
 use crate::models::DiscoveredPaste;
 
 /// Configuration for anonymization behavior
@@ -29,7 +28,26 @@ impl Default for AnonymizationConfig {
     }
 }
 
-/// Anonymize a discovered paste before storing
+/// Remove emojis from text
+fn remove_emojis(text: &str) -> String {
+    text.chars()
+        .filter(|c| {
+            let code = *c as u32;
+            // Filter out emoji ranges
+            !(code >= 0x1F600 && code <= 0x1F64F) && // Emoticons
+            !(code >= 0x1F300 && code <= 0x1F5FF) && // Misc Symbols and Pictographs
+            !(code >= 0x1F680 && code <= 0x1F6FF) && // Transport and Map
+            !(code >= 0x1F1E0 && code <= 0x1F1FF) && // Flags
+            !(code >= 0x2600 && code <= 0x26FF) &&   // Misc symbols
+            !(code >= 0x2700 && code <= 0x27BF) &&   // Dingbats
+            !(code >= 0xFE00 && code <= 0xFE0F) &&   // Variation Selectors
+            !(code >= 0x1F900 && code <= 0x1F9FF) && // Supplemental Symbols and Pictographs
+            !(code >= 0x1FA70 && code <= 0x1FAFF) // Symbols and Pictographs Extended-A
+        })
+        .collect()
+}
+
+/// Anonymize a discovered paste before storage
 pub fn anonymize_discovered_paste(
     mut paste: DiscoveredPaste,
     config: &AnonymizationConfig,
@@ -37,34 +55,38 @@ pub fn anonymize_discovered_paste(
     if config.strip_authors {
         paste.author = None;
     }
-    
+
     if config.strip_urls {
         paste.url = String::new();
     }
-    
+
     if config.sanitize_titles {
         // Remove email addresses and potential identifiers from titles
         if let Some(title) = paste.title {
-            paste.title = Some(sanitize_title(&title));
+            let sanitized = sanitize_title(&title);
+            paste.title = Some(remove_emojis(&sanitized));
         }
     }
-    
+
+    // Remove emojis from content
+    paste.content = remove_emojis(&paste.content);
+
     paste
 }
 
 /// Sanitize a title to remove potentially identifying information
 fn sanitize_title(title: &str) -> String {
     let mut sanitized = title.to_string();
-    
+
     // Remove email addresses
     sanitized = remove_emails(&sanitized);
-    
+
     // Remove URLs
     sanitized = remove_urls(&sanitized);
-    
+
     // Remove usernames (common patterns)
     sanitized = remove_usernames(&sanitized);
-    
+
     sanitized.trim().to_string()
 }
 
@@ -87,12 +109,12 @@ fn remove_urls(text: &str) -> String {
 /// Remove common username patterns
 fn remove_usernames(text: &str) -> String {
     let mut result = text.to_string();
-    
+
     // Remove @username patterns (common on Twitter, GitHub, etc)
     let re = regex::Regex::new(r"@[a-zA-Z0-9_-]+")
         .unwrap_or_else(|_| regex::Regex::new(r"(.+)").unwrap());
     result = re.replace_all(&result, "[user]").to_string();
-    
+
     result
 }
 
@@ -109,7 +131,7 @@ pub fn verify_anonymity(title: Option<&str>, author: Option<&str>) -> bool {
     if author.is_some() {
         return false;
     }
-    
+
     // Title should not contain obvious PII
     if let Some(t) = title {
         // Check for email patterns
@@ -121,7 +143,7 @@ pub fn verify_anonymity(title: Option<&str>, author: Option<&str>) -> bool {
             return false;
         }
     }
-    
+
     true
 }
 

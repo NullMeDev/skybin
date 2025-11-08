@@ -122,28 +122,20 @@ impl Scraper for GitHubGistsScraper {
                     continue;
                 }
 
-                let paste = DiscoveredPaste::new(
-                    "gists",
-                    &gist.id,
-                    file.content.clone(),
-                )
-                .with_title(
-                    gist.description
-                        .unwrap_or_else(|| format!("Gist: {}", filename)),
-                )
-                // Note: author is not set here - it will be None before storage
-                // This is intentional per anonymization requirements
-                .with_url(gist.url)
-                .with_syntax(
-                    file.language
-                        .clone()
-                        .unwrap_or_else(|| "text".to_string()),
-                )
-                .with_created_at(
-                    chrono::DateTime::parse_from_rfc3339(&gist.created_at)
-                        .map(|dt| dt.timestamp())
-                        .unwrap_or(0),
-                );
+                let paste = DiscoveredPaste::new("gists", &gist.id, file.content.clone())
+                    .with_title(
+                        gist.description
+                            .unwrap_or_else(|| format!("Gist: {}", filename)),
+                    )
+                    // Note: author is not set here - it will be None before storage
+                    // This is intentional per anonymization requirements
+                    .with_url(gist.url)
+                    .with_syntax(file.language.clone().unwrap_or_else(|| "text".to_string()))
+                    .with_created_at(
+                        chrono::DateTime::parse_from_rfc3339(&gist.created_at)
+                            .map(|dt| dt.timestamp())
+                            .unwrap_or(0),
+                    );
 
                 pastes.push(paste);
             }

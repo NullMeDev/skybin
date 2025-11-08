@@ -165,9 +165,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
              FROM pastes WHERE id = ?",
         )?;
 
-        let result = stmt.query_row(params![id], |row| {
-            Self::row_to_paste(row)
-        });
+        let result = stmt.query_row(params![id], |row| Self::row_to_paste(row));
 
         match result {
             Ok(paste) => Ok(Some(paste)),
@@ -184,9 +182,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
              FROM pastes WHERE content_hash = ?",
         )?;
 
-        let result = stmt.query_row(params![hash], |row| {
-            Self::row_to_paste(row)
-        });
+        let result = stmt.query_row(params![hash], |row| Self::row_to_paste(row));
 
         match result {
             Ok(paste) => Ok(Some(paste)),
@@ -257,14 +253,18 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 
     /// Get count of sensitive pastes
     pub fn get_sensitive_paste_count(&self) -> Result<i64> {
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM pastes WHERE is_sensitive = 1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT COUNT(*) FROM pastes WHERE is_sensitive = 1")?;
         let count = stmt.query_row([], |row| row.get(0))?;
         Ok(count)
     }
 
     /// Get paste count by source
     pub fn get_paste_count_by_source(&self, source: &str) -> Result<i64> {
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM pastes WHERE source = ?")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT COUNT(*) FROM pastes WHERE source = ?")?;
         let count = stmt.query_row(params![source], |row| row.get(0))?;
         Ok(count)
     }
@@ -280,10 +280,9 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 
     /// Delete expired pastes manually (in addition to trigger)
     pub fn delete_expired_pastes(&mut self) -> Result<usize> {
-        let changes = self.conn.execute(
-            "DELETE FROM pastes WHERE expires_at < unixepoch()",
-            [],
-        )?;
+        let changes = self
+            .conn
+            .execute("DELETE FROM pastes WHERE expires_at < unixepoch()", [])?;
         Ok(changes)
     }
 
@@ -324,8 +323,8 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
     use chrono::Utc;
+    use uuid::Uuid;
 
     fn create_test_paste() -> Paste {
         let now = Utc::now().timestamp();

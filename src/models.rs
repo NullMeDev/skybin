@@ -41,7 +41,11 @@ pub struct DiscoveredPaste {
 }
 
 impl DiscoveredPaste {
-    pub fn new(source: impl Into<String>, source_id: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn new(
+        source: impl Into<String>,
+        source_id: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             source: source.into(),
             source_id: source_id.into(),

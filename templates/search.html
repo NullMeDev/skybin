@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="content-card">
+    <h3>Search Pastes</h3>
+    
+    <form id="searchForm" style="max-width: 800px;">
+        <div class="search-form">
+            <input type="text" id="query" name="query" placeholder="Search by title or content...">
+            <button type="submit" class="btn btn-primary">Search</button>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+            <div class="form-group">
+                <label for="source">Source</label>
+                <select id="source" name="source">
+                    <option value="">All Sources</option>
+                    <option value="pastebin">Pastebin</option>
+                    <option value="gists">GitHub Gists</option>
+                    <option value="paste_ee">Paste.ee</option>
+                    <option value="web">Web Upload</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="sensitive">Status</label>
+                <select id="sensitive" name="sensitive">
+                    <option value="">All</option>
+                    <option value="true">Sensitive Only</option>
+                    <option value="false">Safe Only</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="limit">Results Per Page</label>
+                <select id="limit" name="limit">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div id="results"></div>
+
+<script>
+    const form = document.getElementById('searchForm');
+    const resultsDiv = document.getElementById('results');
+    
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        performSearch();
+    });
+    
+    // Load search results on page load if query param exists
+    function loadInitialSearch() {
+        const params = new URLSearchParams(window.location.search);
+        const query = params.get('q');
+        if (query) {
+            document.getElementById('query').value = query;
+            performSearch();
+        }
+    }
+    
+    async function performSearch() {
+        resultsDiv.innerHTML = '<div class="content-card"><p style="text-align: center; color: #9ca3af;">Searching...</p></div>';
+        
+        const params = new URLSearchParams();
+        const query = document.getElementById('query').value;
+        const source = document.getElementById('source').value;
+        const sensitive = document.getElementById('sensitive').value;
+        const limit = document.getElementById('limit').value;
+        
+        if (query) params.append('query', query);
+        if (source) params.append('source', source);
+        if (sensitive) params.append('is_sensitive', sensitive === 'true');
+        if (limit) params.append('limit', limit);
+        
+        try {
+            const response = await fetch(`/search?${params}`);
+            const data = await response.json();
+            
+            if (data.success && data.data && data.data.length > 0) {
+                const pastes = data.data;
+                const resultsHTML = `
+                    <div class="content-card">
+                        <h3>Results (${pastes.length} found)</h3>
+                        <div style="overflow-x: auto;">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Title</th>
+                                        <th>Source</th>
+                                        <th>Status</th>
+                                        <th>Date</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${pastes.map(paste => `
+                                        <tr>
+                                            <td>${paste.title || '(No Title)'}</td>
+                                            <td><span class="badge badge-info">${paste.source}</span></td>
+                                            <td>
+                                                <span class="badge ${paste.is_sensitive ? 'badge-danger' : 'badge-success'}">
+                                                    ${paste.is_sensitive ? 'SENSITIVE' : 'SAFE'}
+                                                </span>
+                                            </td>
+                                            <td>${new Date(paste.created_at * 1000).toLocaleDateString()}</td>
+                                            <td><a href="/paste/${paste.id}" class="btn btn-primary btn-small">View</a></td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+                resultsDiv.innerHTML = resultsHTML;
+            } else {
+                resultsDiv.innerHTML = '<div class="content-card"><p style="text-align: center; color: #9ca3af;">No results found. Try a different search.</p></div>';
+            }
+        } catch (error) {
+            resultsDiv.innerHTML = `<div class="content-card alert alert-danger">Error: ${error.message}</div>`;
+        }
+    }
+    
+    loadInitialSearch();
+</script>
+{% endblock %}

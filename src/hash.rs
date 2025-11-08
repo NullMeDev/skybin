@@ -1,10 +1,10 @@
 use sha2::{Digest, Sha256};
 
 /// Compute SHA256 hash of content for deduplication
-/// 
+///
 /// # Arguments
 /// * `content` - The paste content to hash
-/// 
+///
 /// # Returns
 /// Hex-encoded SHA256 hash string
 pub fn compute_hash(content: &str) -> String {
@@ -15,7 +15,7 @@ pub fn compute_hash(content: &str) -> String {
 }
 
 /// Normalize content before hashing (optional preprocessing)
-/// 
+///
 /// Currently does basic trimming, but can be extended for:
 /// - Line ending normalization (CRLF vs LF)
 /// - Whitespace normalization
@@ -39,7 +39,10 @@ mod tests {
         let content = "hello world";
         let hash = compute_hash(content);
         // SHA256("hello world") = b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
-        assert_eq!(hash, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9");
+        assert_eq!(
+            hash,
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        );
     }
 
     #[test]
@@ -68,7 +71,7 @@ mod tests {
     fn test_hash_normalized_consistency() {
         let content1 = "test content";
         let content2 = "  test content  \n";
-        
+
         let hash1 = compute_hash_normalized(content1);
         let hash2 = compute_hash_normalized(content2);
         assert_eq!(hash1, hash2);
@@ -78,7 +81,10 @@ mod tests {
     fn test_empty_content() {
         let hash = compute_hash("");
         // SHA256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-        assert_eq!(hash, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+        assert_eq!(
+            hash,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
     }
 
     #[test]

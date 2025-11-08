@@ -1,11 +1,11 @@
 use crate::db::Database;
+use crate::hash;
 use crate::models::Paste;
 use crate::patterns::PatternDetector;
 use crate::rate_limiter::SourceRateLimiter;
-use crate::hash;
 use chrono::Utc;
-use uuid::Uuid;
 use std::time::Duration;
+use uuid::Uuid;
 
 /// Manages scraping operations
 pub struct Scheduler {
@@ -34,11 +34,15 @@ impl Scheduler {
     }
 
     /// Process and store a discovered paste
-    pub fn process_paste(&mut self, discovered: crate::models::DiscoveredPaste) -> anyhow::Result<()> {
+    pub fn process_paste(
+        &mut self,
+        discovered: crate::models::DiscoveredPaste,
+    ) -> anyhow::Result<()> {
         // Anonymize the paste before storing (strip authors, URLs, etc)
         let anonymization_config = crate::anonymization::AnonymizationConfig::default();
-        let discovered = crate::anonymization::anonymize_discovered_paste(discovered, &anonymization_config);
-        
+        let discovered =
+            crate::anonymization::anonymize_discovered_paste(discovered, &anonymization_config);
+
         // Compute content hash
         let content_hash = hash::compute_hash_normalized(&discovered.content);
 
@@ -63,7 +67,11 @@ impl Scheduler {
             content_hash,
             url: Some(discovered.url),
             syntax: discovered.syntax.unwrap_or_else(|| "plaintext".to_string()),
-            matched_patterns: if patterns.is_empty() { None } else { Some(patterns) },
+            matched_patterns: if patterns.is_empty() {
+                None
+            } else {
+                Some(patterns)
+            },
             is_sensitive,
             created_at: now,
             expires_at: now + (7 * 24 * 60 * 60), // 7-day TTL
@@ -84,7 +92,7 @@ mod tests {
         let db = Database::open(":memory:").unwrap();
         let detector = PatternDetector::new(vec![]);
         let limiter = SourceRateLimiter::default_jitter();
-        
+
         let scheduler = Scheduler::new(db, detector, limiter, 300);
         assert_eq!(scheduler.scrape_interval, Duration::from_secs(300));
     }

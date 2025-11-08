@@ -1,5 +1,5 @@
-use crate::models::PatternMatch;
 use super::rules::{PatternRule, BUILTIN_PATTERNS};
+use crate::models::PatternMatch;
 
 /// Detector for finding sensitive patterns in paste content
 #[derive(Clone)]
@@ -38,7 +38,7 @@ impl PatternDetector {
         for pattern in &self.patterns {
             for cap in pattern.regex.captures_iter(content) {
                 let matched_text = cap.get(0).map(|m| m.as_str()).unwrap_or("");
-                
+
                 // Extract a snippet (first 100 chars or full match if shorter)
                 let snippet = if matched_text.len() > 100 {
                     format!("{}...", &matched_text[..97])
@@ -61,7 +61,9 @@ impl PatternDetector {
     /// Determine if content is sensitive based on detected patterns
     pub fn is_sensitive(&self, content: &str) -> bool {
         let matches = self.detect(content);
-        matches.iter().any(|m| m.severity == "critical" || m.severity == "high")
+        matches
+            .iter()
+            .any(|m| m.severity == "critical" || m.severity == "high")
     }
 
     /// Get highest severity level detected
@@ -70,10 +72,10 @@ impl PatternDetector {
         if matches.is_empty() {
             return None;
         }
-        
+
         let mut highest = matches[0].severity.clone();
         let mut highest_score = severity_score(&highest);
-        
+
         for m in &matches[1..] {
             let score = severity_score(&m.severity);
             if score > highest_score {
@@ -81,7 +83,7 @@ impl PatternDetector {
                 highest_score = score;
             }
         }
-        
+
         Some(highest)
     }
 

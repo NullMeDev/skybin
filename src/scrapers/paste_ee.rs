@@ -113,15 +113,8 @@ impl Scraper for PasteEeScraper {
             )
             .with_title(title)
             .with_url(format!("https://paste.ee/p/{}", item.id))
-            .with_syntax(
-                item.language
-                    .unwrap_or_else(|| "text".to_string()),
-            )
-            .with_created_at(
-                item.created
-                    .or(item.modified)
-                    .unwrap_or(0),
-            );
+            .with_syntax(item.language.unwrap_or_else(|| "text".to_string()))
+            .with_created_at(item.created.or(item.modified).unwrap_or(0));
 
             pastes.push(paste);
         }
