@@ -4,6 +4,7 @@ use async_trait::async_trait;
 
 /// Rentry scraper - scrapes from rentry.co recent page
 pub struct RentryScraper {
+    #[allow(dead_code)]
     base_url: String,
 }
 
@@ -27,7 +28,7 @@ impl Scraper for RentryScraper {
         "rentry"
     }
 
-    async fn fetch_recent(&self, client: &reqwest::Client) -> ScraperResult<Vec<DiscoveredPaste>> {
+    async fn fetch_recent(&self, _client: &reqwest::Client) -> ScraperResult<Vec<DiscoveredPaste>> {
         // Rentry.co doesn't have a public recent page, so we'll return empty for now
         // In production, you'd need to either:
         // 1. Have a list of known rentry URLs to check

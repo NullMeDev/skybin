@@ -34,15 +34,15 @@ fn remove_emojis(text: &str) -> String {
         .filter(|c| {
             let code = *c as u32;
             // Filter out emoji ranges
-            !(code >= 0x1F600 && code <= 0x1F64F) && // Emoticons
-            !(code >= 0x1F300 && code <= 0x1F5FF) && // Misc Symbols and Pictographs
-            !(code >= 0x1F680 && code <= 0x1F6FF) && // Transport and Map
-            !(code >= 0x1F1E0 && code <= 0x1F1FF) && // Flags
-            !(code >= 0x2600 && code <= 0x26FF) &&   // Misc symbols
-            !(code >= 0x2700 && code <= 0x27BF) &&   // Dingbats
-            !(code >= 0xFE00 && code <= 0xFE0F) &&   // Variation Selectors
-            !(code >= 0x1F900 && code <= 0x1F9FF) && // Supplemental Symbols and Pictographs
-            !(code >= 0x1FA70 && code <= 0x1FAFF) // Symbols and Pictographs Extended-A
+            !(0x1F600..=0x1F64F).contains(&code) && // Emoticons
+            !(0x1F300..=0x1F5FF).contains(&code) && // Misc Symbols and Pictographs
+            !(0x1F680..=0x1F6FF).contains(&code) && // Transport and Map
+            !(0x1F1E0..=0x1F1FF).contains(&code) && // Flags
+            !(0x2600..=0x26FF).contains(&code) &&   // Misc symbols
+            !(0x2700..=0x27BF).contains(&code) &&   // Dingbats
+            !(0xFE00..=0xFE0F).contains(&code) &&   // Variation Selectors
+            !(0x1F900..=0x1F9FF).contains(&code) && // Supplemental Symbols and Pictographs
+            !(0x1FA70..=0x1FAFF).contains(&code) // Symbols and Pictographs Extended-A
         })
         .collect()
 }

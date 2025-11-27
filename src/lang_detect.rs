@@ -11,13 +11,11 @@ pub fn detect_language(content: &str) -> String {
     if content.contains("{")
         && content.contains("}")
         && (content.contains(":") && content.contains(";"))
-    {
-        if content_lower.contains("color:")
+        && (content_lower.contains("color:")
             || content_lower.contains("font-")
-            || content_lower.contains("margin")
-        {
-            return "CSS".to_string();
-        }
+            || content_lower.contains("margin"))
+    {
+        return "CSS".to_string();
     }
 
     // JavaScript/TypeScript
@@ -107,12 +105,11 @@ pub fn detect_language(content: &str) -> String {
     }
 
     // JSON
-    if (content.trim().starts_with("{") && content.trim().ends_with("}"))
-        || (content.trim().starts_with("[") && content.trim().ends_with("]"))
+    if ((content.trim().starts_with("{") && content.trim().ends_with("}"))
+        || (content.trim().starts_with("[") && content.trim().ends_with("]")))
+        && (content.contains("\":") || content.contains("\": "))
     {
-        if content.contains("\":") || content.contains("\": ") {
-            return "JSON".to_string();
-        }
+        return "JSON".to_string();
     }
 
     // Markdown

@@ -30,8 +30,14 @@ cargo test
 # Run tests with output
 cargo test -- --nocapture
 
-# Run specific test
-cargo test test_name
+# Run specific test by name substring
+cargo test hash_consistency
+
+# Run tests in a specific module
+cargo test patterns::detector
+
+# Run integration tests
+cargo test --test e2e_scrapers_anonymization
 
 # Run linter (clippy)
 cargo clippy
@@ -62,32 +68,67 @@ PasteVault is a concurrent paste aggregator that scrapes multiple public paste s
 
 ### Data Flow
 ```
-Scrapers → Pattern Detection → Deduplication → SQLite (FTS5) → Web Interface
+                                    ┌─────────────────────┐
+                                    │  External URL API   │
+                                    │  POST /api/submit-url│
+                                    └──────────┬──────────┘
+                                               │
+                                               ▼
+Scrapers → Anonymization → Pattern Detection → Deduplication → SQLite (FTS5) → Web Interface
+                                                                                    ↓
+                                                                          Language Detection
 ```
 
-1. **Scrapers** (`src/scrapers/`): Async scrapers for each source (Pastebin, Gists, Paste.ee, etc.)
-   - Implement the `Scraper` trait
+1. **Scrapers** (`src/scrapers/`): Async scrapers for 13 sources
+   - **Active scrapers** (have public listing/archive pages):
+     - Pastebin (`pastebin.rs`) - scrapes archive page
+     - GitHub Gists (`github_gists.rs`) - uses public API, optional token for higher rate limits
+     - Slexy (`slexy.rs`) - scrapes /recent page
+     - ControlC (`controlc.rs`) - scrapes /recent page
+   - **Placeholder scrapers** (no public recent API - use external URL submission):
+     - Paste.ee, DPaste, Rentry, Hastebin, Ubuntu Pastebin, ix.io, JustPaste.it, Ghostbin (defunct)
+   - **External URL scraper**: Always enabled, processes URLs submitted via API
+   - All scrapers implement the `Scraper` trait
    - Use rate limiting with jitter and exponential backoff
-   - Return `DiscoveredPaste` structs
+   - Return `Vec<DiscoveredPaste>`
 
-2. **Pattern Detection** (`src/patterns/`): Regex-based detection engine
+2. **Anonymization** (`src/anonymization.rs`): Privacy-first processing
+   - Strips author names, URLs, emails from scraped pastes
+   - Sanitizes titles to remove PII
+   - Removes emojis and potentially identifying information
+   - User-submitted pastes are fully anonymous (no IP logging)
+
+3. **Pattern Detection** (`src/patterns/`): Regex-based detection engine
    - Configured via `config.toml` `[patterns]` section
    - Detects API keys, credentials, private keys, credit cards, IPs/CIDRs
    - Tags pastes with `PatternMatch` structs and sets `is_sensitive` flag
+   - Supports custom user-defined patterns with severity levels
 
-3. **Deduplication** (`src/hash.rs`): SHA256 content hashing
+4. **Deduplication** (`src/hash.rs`): SHA256 content hashing
    - Prevents storing duplicate pastes from different sources
    - Uses `content_hash` field with UNIQUE constraint
 
-4. **Storage** (`src/db.rs`): SQLite with FTS5 full-text search
+5. **Storage** (`src/db.rs`): SQLite with FTS5 full-text search
    - Auto-purge via trigger: deletes pastes older than `retention_days` (default: 7)
    - FIFO enforcement: caps at `max_pastes` (default: 10,000)
    - FTS5 triggers keep search index in sync automatically
 
-5. **Web Interface** (`src/web/`): Axum web server with Askama templates
-   - Routes: `/` (feed), `/paste/{id}`, `/raw/{id}`, `/search`, `/upload`
-   - HTMX for dynamic updates without heavy JavaScript
-   - API endpoints at `/api/pastes` and `/api/paste`
+6. **Language Detection** (`src/lang_detect.rs`): Auto-detect syntax
+   - Pattern-based detection for 15+ languages
+   - Applies to both scraped and user-uploaded pastes
+   - Used for syntax highlighting in web interface
+
+7. **Web Interface** (`src/web/`): Dual API/HTML architecture
+   - **HTML routes**: `/`, `/paste/{id}`, `/raw/{id}`, `/search`, `/upload`
+   - **API routes**: `/api/pastes`, `/api/paste/{id}`, `/api/search`, `/api/stats`, `/api/health`, `/api/submit-url`
+   - Axum web framework with Askama template rendering
+   - JSON API for programmatic access
+
+8. **External URL Submission** (`src/scrapers/external_url.rs`): User-submitted paste monitoring
+   - Submit paste URLs from ANY paste site via `POST /api/submit-url`
+   - Queue-based processing (up to 10 URLs per scrape cycle)
+   - Automatic source detection from URL (pastebin, gist, rentry, etc.)
+   - Deduplication prevents re-fetching same URLs
 
 ### Key Components
 
@@ -101,16 +142,24 @@ Scrapers → Pattern Detection → Deduplication → SQLite (FTS5) → Web Inter
 - `DiscoveredPaste`: Intermediate format from scrapers (before storage)
 - `PatternMatch`: Individual pattern detection result
 - `SearchFilters`: Query parameters for search
+- `Stats`: Statistics about pastes and sources
 
 **Scheduler** (`src/scheduler.rs`):
 - Orchestrates concurrent scraper execution
 - Manages scrape intervals and retry logic
 - Uses Tokio for async execution
+- Processes discovered pastes through the pipeline
 
 **Rate Limiter** (`src/rate_limiter.rs`):
 - Per-source rate limiting using the `governor` crate
 - Adds random jitter (500-5000ms default) between requests
 - Exponential backoff on failures
+
+**Anonymization** (`src/anonymization.rs`):
+- Strips author names, URLs, and emails from scraped content
+- Sanitizes titles to remove PII (emails, @usernames, URLs)
+- Removes emojis from content and titles
+- Validates anonymity before storage
 
 ## Configuration
 
@@ -150,22 +199,62 @@ Located in `migrations/001_initial.sql`:
 
 ## Module Structure
 
-Current state (v0.1.0 - early development):
-- `src/main.rs`: Entry point (currently placeholder)
-- `src/models.rs`: Core data structures (implemented)
+Current state (v0.2.0 - fully implemented):
 
-Planned modules (from README):
-- `src/config.rs`: Configuration parser (TOML)
-- `src/db.rs`: Database operations and queries
-- `src/hash.rs`: SHA256 content hashing
-- `src/patterns/`: Pattern detection engine
-  - `mod.rs`, `detector.rs`, `rules.rs`
-- `src/scrapers/`: Individual source scrapers
-  - `mod.rs`, `traits.rs`, `pastebin.rs`, `gists.rs`, etc.
-- `src/scheduler.rs`: Scraping orchestration
-- `src/rate_limiter.rs`: Rate limiting logic
-- `src/web/`: Web interface
-  - `mod.rs`, `routes.rs`, `handlers.rs`, `templates/`
+**Core modules** (root of `src/`):
+- `main.rs`: Application entry point, scraper task spawning
+- `lib.rs`: Library exports for all modules
+- `models.rs`: Data structures (`Paste`, `DiscoveredPaste`, `PatternMatch`, `SearchFilters`)
+- `config.rs`: TOML configuration parser and validation
+- `db.rs`: SQLite database layer with FTS5 search
+- `hash.rs`: SHA256 content hashing for deduplication
+- `scheduler.rs`: Paste processing pipeline orchestration
+- `rate_limiter.rs`: Per-source rate limiting with jitter
+- `anonymization.rs`: PII stripping and privacy protection
+- `lang_detect.rs`: Language/syntax auto-detection
+
+**Pattern detection** (`src/patterns/`):
+- `mod.rs`: Module exports and detector instantiation
+- `detector.rs`: Pattern matching engine with category toggles
+- `rules.rs`: Built-in regex patterns (API keys, credentials, private keys, etc.)
+
+**Scrapers** (`src/scrapers/`):
+- `mod.rs`: Scraper registration and exports
+- `traits.rs`: `Scraper` trait definition and error types
+- **Active scrapers:**
+  - `pastebin.rs`: Pastebin.com - scrapes archive page
+  - `github_gists.rs`: GitHub Gists - public API with optional token
+  - `slexy.rs`: Slexy.org - scrapes /recent page
+  - `controlc.rs`: ControlC.com - scrapes /recent page
+- **Placeholder scrapers** (no public recent API):
+  - `paste_ee.rs`: Paste.ee
+  - `dpaste.rs`: DPaste.org
+  - `rentry.rs`: Rentry.co
+  - `hastebin.rs`: Hastebin/Toptal
+  - `ubuntu_pastebin.rs`: paste.ubuntu.com
+  - `ixio.rs`: ix.io
+  - `justpaste.rs`: JustPaste.it
+  - `ghostbin.rs`: Ghostbin (defunct since 2021)
+- `external_url.rs`: External URL queue scraper (always enabled)
+
+**Web interface** (`src/web/`):
+- `mod.rs`: Router setup, state definition (`AppState`), API response types
+- `handlers.rs`: Route handlers for both HTML and JSON endpoints
+
+**AppState** structure:
+```rust
+pub struct AppState {
+    pub db: Arc<Mutex<Database>>,
+    pub url_scraper: Option<Arc<ExternalUrlScraper>>,  // For /api/submit-url
+}
+```
+
+**Templates** (`templates/`):
+- `base.html`: Base layout template
+- `dashboard.html`: Main feed page
+- `paste_detail.html`: Individual paste view
+- `search.html`: Search interface
+- `upload.html`: Paste submission form
 
 ## Development Notes
 
@@ -175,7 +264,34 @@ Planned modules (from README):
 2. Implement the `Scraper` trait with `name()` and `fetch_recent()` methods
 3. Return `Vec<DiscoveredPaste>` from scraper
 4. Add source toggle to `config.toml` `[sources]` section
-5. Register scraper in `src/scrapers/mod.rs`
+5. Register scraper in `src/scrapers/mod.rs` (add to exports)
+6. Spawn scraper task in `src/main.rs` with conditional check
+
+Example:
+```rust
+use crate::scrapers::traits::{Scraper, ScraperResult};
+use async_trait::async_trait;
+
+pub struct MySiteScraper;
+
+impl MySiteScraper {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl Scraper for MySiteScraper {
+    fn name(&self) -> &str {
+        "mysite"
+    }
+
+    async fn fetch_recent(&self, client: &reqwest::Client) -> ScraperResult<Vec<DiscoveredPaste>> {
+        // Fetch and parse pastes from source
+        // Return Vec<DiscoveredPaste>
+    }
+}
+```
 
 ### Pattern Detection
 
@@ -183,6 +299,8 @@ Planned modules (from README):
 - Each pattern has: name, regex, severity (low/moderate/high/critical)
 - Custom patterns can be added via `config.toml` `[[patterns.custom]]` sections
 - Matched patterns are stored as JSON in the `matched_patterns` field
+- Categories: AWS keys, GitHub tokens, private keys, credit cards, email:password combos, IPs/CIDRs
+- Detector loaded from config with `PatternDetector::load_from_config()`
 
 ### Deduplication Strategy
 
@@ -190,16 +308,77 @@ Planned modules (from README):
 - Hash stored in `content_hash` field with UNIQUE constraint
 - Duplicate inserts will fail silently (or log warning)
 - Same content from different sources = one stored paste
+- Hash function: `crate::hash::compute_hash_normalized()`
+
+### Web Development
+
+**Askama Templates**:
+- Templates in `templates/` directory
+- Use `#[derive(Template)]` with `#[template(path = "...html")]`
+- Automatic HTML escaping for security
+- Base template (`base.html`) for consistent layout
+
+**Dual Architecture**:
+- HTML routes return Askama templates (e.g., `DashboardTemplate`)
+- API routes return `Json<ApiResponse<T>>` with typed responses
+- Same data models serve both HTML and API endpoints
+- State management via `Arc<Mutex<Database>>` for thread-safe access
+
+**Adding New Routes**:
+1. Define handler in `src/web/handlers.rs`
+2. Add template struct with `#[derive(Template)]` if HTML route
+3. Register route in `create_router()` in `src/web/mod.rs`
+4. Use `State(state): State<AppState>` extractor for DB access
+5. Access URL scraper via `state.url_scraper` for submission endpoints
+
+### External URL Submission API
+
+Submit paste URLs from any source for monitoring:
+
+```bash
+# Single URL
+curl -X POST http://localhost:8081/api/submit-url \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://pastebin.com/AbCd1234", "urls": []}'
+
+# Multiple URLs
+curl -X POST http://localhost:8081/api/submit-url \
+  -H "Content-Type: application/json" \
+  -d '{"url": "", "urls": ["https://pastebin.com/abc", "https://gist.github.com/user/xyz"]}'
+```
+
+Supported source detection: pastebin.com, gist.github.com, paste.ee, dpaste.*, rentry.*, hastebin.*, or "external" for others.
 
 ### Testing Strategy
 
-Tests should cover:
+Tests cover:
 - Pattern detection accuracy (positive/negative cases)
-- Content hash collision handling
-- Rate limiter behavior
+- Content hash consistency and collision handling
+- Rate limiter behavior and jitter
 - Database triggers (auto-purge, FIFO enforcement)
-- FTS5 search relevance
-- Scraper error handling and retries
+- FTS5 search relevance and indexing
+- Scraper parsing and error handling
+- Anonymization PII stripping
+- Language detection accuracy
+- Web API response formats
+
+Example test commands:
+```bash
+# Test pattern detection
+cargo test patterns::detector
+
+# Test specific pattern category
+cargo test test_aws_key_detection
+
+# Test hash consistency
+cargo test hash::test_hash_consistency
+
+# Test database operations
+cargo test db::test_insert_and_retrieve
+
+# Test anonymization
+cargo test anonymization::test_verify_anonymity
+```
 
 ### Dependencies
 

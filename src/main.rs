@@ -4,7 +4,11 @@ use paste_vault::patterns::PatternDetector;
 use paste_vault::rate_limiter::SourceRateLimiter;
 use paste_vault::scheduler::Scheduler;
 use paste_vault::scrapers::traits::Scraper;
-use paste_vault::scrapers::{DPasteScraper, GitHubGistsScraper, PasteEeScraper, PastebinScraper};
+use paste_vault::scrapers::{
+    ControlcScraper, DPasteScraper, ExternalUrlScraper, GhostbinScraper, GitHubGistsScraper,
+    HastebinScraper, IxioScraper, JustPasteScraper, PasteEeScraper, PastebinScraper, RentryScraper,
+    SlexyScraper, UbuntuPastebinScraper,
+};
 use paste_vault::web::{create_router, AppState};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -40,6 +44,10 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let detector_clone = detector.clone();
+
+    // Create external URL scraper (shared with API)
+    let external_scraper = Arc::new(ExternalUrlScraper::new());
+    let external_scraper_clone = external_scraper.clone();
 
     // Helper to spawn a scraper task
     let spawn_scraper = |name: &'static str, scraper: Box<dyn Scraper + Send + Sync>| {
@@ -96,11 +104,42 @@ async fn main() -> anyhow::Result<()> {
     if config.sources.dpaste {
         spawn_scraper("dpaste", Box::new(DPasteScraper::new()));
     }
+    if config.sources.rentry {
+        spawn_scraper("rentry", Box::new(RentryScraper::new()));
+    }
+    if config.sources.hastebin {
+        spawn_scraper("hastebin", Box::new(HastebinScraper::new()));
+    }
+    if config.sources.slexy {
+        spawn_scraper("slexy", Box::new(SlexyScraper::new()));
+    }
+    if config.sources.ubuntu_pastebin {
+        spawn_scraper("ubuntu_pastebin", Box::new(UbuntuPastebinScraper::new()));
+    }
+    if config.sources.ghostbin {
+        spawn_scraper("ghostbin", Box::new(GhostbinScraper::new()));
+    }
+    if config.sources.ixio {
+        spawn_scraper("ixio", Box::new(IxioScraper::new()));
+    }
+    if config.sources.justpaste {
+        spawn_scraper("justpaste", Box::new(JustPasteScraper::new()));
+    }
+    if config.sources.controlc {
+        spawn_scraper("controlc", Box::new(ControlcScraper::new()));
+    }
 
-    println!("✓ Scraper tasks spawned (enabled sources)");
+    // External URL scraper (always enabled for URL submissions)
+    let scraper_for_task = (*external_scraper_clone).clone();
+    spawn_scraper("external_url", Box::new(scraper_for_task));
+
+    println!("✓ Scraper tasks spawned (enabled sources + external_url)");
 
     // Create web server state
-    let app_state = AppState { db: db.clone() };
+    let app_state = AppState {
+        db: db.clone(),
+        url_scraper: Some(external_scraper),
+    };
     println!("✓ Web server state created");
 
     // Create router

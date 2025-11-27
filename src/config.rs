@@ -60,6 +60,12 @@ pub struct SourcesConfig {
     pub dpaste: bool,
     pub hastebin: bool,
     pub ubuntu_pastebin: bool,
+    #[serde(default)]
+    pub ixio: bool,
+    #[serde(default)]
+    pub justpaste: bool,
+    #[serde(default)]
+    pub controlc: bool,
 }
 
 impl SourcesConfig {
@@ -92,6 +98,15 @@ impl SourcesConfig {
         }
         if self.ubuntu_pastebin {
             sources.push("ubuntu_pastebin");
+        }
+        if self.ixio {
+            sources.push("ixio");
+        }
+        if self.justpaste {
+            sources.push("justpaste");
+        }
+        if self.controlc {
+            sources.push("controlc");
         }
         sources
     }
@@ -133,7 +148,7 @@ impl Config {
     }
 
     /// Load configuration from a TOML string
-    pub fn from_str(content: &str) -> Result<Self> {
+    pub fn from_toml_str(content: &str) -> Result<Self> {
         let config = toml::from_str(content)?;
         Ok(config)
     }
@@ -192,7 +207,7 @@ db_credentials = true
 generic_api_keys = true
 "#;
 
-        let config = Config::from_str(toml_str).unwrap();
+        let config = Config::from_toml_str(toml_str).unwrap();
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 3000);
         assert_eq!(config.storage.db_path, "test.db");
@@ -249,7 +264,7 @@ db_credentials = true
 generic_api_keys = true
 "#;
 
-        let config = Config::from_str(toml_str).unwrap();
+        let config = Config::from_toml_str(toml_str).unwrap();
         let enabled = config.sources.enabled_sources();
         assert_eq!(enabled.len(), 3);
         assert!(enabled.contains(&"pastebin"));

@@ -28,12 +28,18 @@ user_agents = [
 pastebin = true
 gists = true
 paste_ee = false  # API not available
-rentry = false  # May have anti-scraping
-ghostbin = false  # Check if still operational
-slexy = true
+rentry = false  # No public recent API
 dpaste = false  # API not available
-hastebin = false  # Many instances, specify if needed
-ubuntu_pastebin = false
+hastebin = false  # No public recent API
+slexy = false  # Has recent page but may be unstable
+ubuntu_pastebin = false  # No public recent API
+ghostbin = false  # Service defunct since 2021
+ixio = false  # No public recent API
+justpaste = false  # No public recent API
+controlc = false  # Has recent page
+
+# Note: external_url scraper is always enabled
+# Submit paste URLs via POST /api/submit-url
 
 [apis]
 # Optional: Pastebin PRO API key for higher limits

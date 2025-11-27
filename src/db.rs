@@ -165,7 +165,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
              FROM pastes WHERE id = ?",
         )?;
 
-        let result = stmt.query_row(params![id], |row| Self::row_to_paste(row));
+        let result = stmt.query_row(params![id], Self::row_to_paste);
 
         match result {
             Ok(paste) => Ok(Some(paste)),
@@ -182,7 +182,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
              FROM pastes WHERE content_hash = ?",
         )?;
 
-        let result = stmt.query_row(params![hash], |row| Self::row_to_paste(row));
+        let result = stmt.query_row(params![hash], Self::row_to_paste);
 
         match result {
             Ok(paste) => Ok(Some(paste)),
@@ -200,7 +200,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         )?;
 
         let pastes = stmt
-            .query_map(params![limit], |row| Self::row_to_paste(row))?
+            .query_map(params![limit], Self::row_to_paste)?
             .collect::<SqlResult<Vec<_>>>()?;
 
         Ok(pastes)
@@ -208,7 +208,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 
     /// Search pastes using full-text search
     pub fn search_pastes(&self, filters: &SearchFilters) -> Result<Vec<Paste>> {
-        let query = filters.query.as_ref().map(|q| q.as_str()).unwrap_or("*");
+        let query = filters.query.as_deref().unwrap_or("*");
         let limit = filters.limit.unwrap_or(10).min(100);
         let offset = filters.offset.unwrap_or(0);
 
@@ -237,7 +237,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
                     limit,
                     offset,
                 ],
-                |row| Self::row_to_paste(row),
+                Self::row_to_paste,
             )?
             .collect::<SqlResult<Vec<_>>>()?;
 

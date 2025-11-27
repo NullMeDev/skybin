@@ -168,7 +168,7 @@ pub async fn upload_paste_json(
     if let Some(t) = &title {
         // Sanitize title to remove emails, URLs, usernames
         let sanitized = t
-            .replace(|c: char| c == '@', "")
+            .replace('@', "")
             .replace("http://", "")
             .replace("https://", "");
         title = if sanitized.is_empty() {
@@ -316,4 +316,63 @@ pub async fn statistics(
 /// GET /upload - Upload page HTML
 pub async fn upload_page() -> impl axum::response::IntoResponse {
     UploadTemplate
+}
+
+/// Request body for submitting URLs
+#[derive(Debug, Deserialize)]
+pub struct SubmitUrlRequest {
+    pub url: String,
+    #[serde(default)]
+    pub urls: Vec<String>,
+}
+
+/// Response for URL submission
+#[derive(Debug, Serialize)]
+pub struct SubmitUrlResponse {
+    pub queued: usize,
+    pub message: String,
+}
+
+/// POST /api/submit-url - Submit paste URLs for monitoring
+pub async fn submit_url(
+    State(state): State<AppState>,
+    Json(payload): Json<SubmitUrlRequest>,
+) -> Result<(StatusCode, Json<ApiResponse<SubmitUrlResponse>>), ApiError> {
+    let scraper = state
+        .url_scraper
+        .as_ref()
+        .ok_or_else(|| ApiError("External URL scraper not available".to_string()))?;
+
+    let mut urls_to_add = Vec::new();
+
+    // Add single URL if provided
+    if !payload.url.is_empty() {
+        urls_to_add.push(payload.url);
+    }
+
+    // Add multiple URLs if provided
+    urls_to_add.extend(payload.urls);
+
+    // Validate URLs
+    let valid_urls: Vec<String> = urls_to_add
+        .into_iter()
+        .filter(|url| {
+            // Basic URL validation
+            url.starts_with("http://") || url.starts_with("https://")
+        })
+        .collect();
+
+    if valid_urls.is_empty() {
+        return Err(ApiError("No valid URLs provided".to_string()));
+    }
+
+    let count = valid_urls.len();
+    scraper.add_urls(valid_urls);
+
+    let response = SubmitUrlResponse {
+        queued: count,
+        message: format!("Queued {} URL(s) for scraping", count),
+    };
+
+    Ok((StatusCode::ACCEPTED, Json(ApiResponse::ok(response))))
 }

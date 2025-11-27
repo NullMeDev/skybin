@@ -15,6 +15,7 @@ pub mod handlers;
 #[derive(Clone)]
 pub struct AppState {
     pub db: Arc<Mutex<crate::db::Database>>,
+    pub url_scraper: Option<Arc<crate::scrapers::ExternalUrlScraper>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -72,6 +73,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/paste/:id", get(handlers::get_paste))
         // POST endpoints
         .route("/api/upload", post(handlers::upload_paste_json))
+        .route("/api/submit-url", post(handlers::submit_url))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB limit
         .layer(CompressionLayer::new())
         .with_state(state)
