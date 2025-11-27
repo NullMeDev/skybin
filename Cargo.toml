@@ -1,6 +1,6 @@
 [package]
 name = "paste-vault"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["PasteVault Team"]
 description = "A secure, multi-source paste aggregator and anonymous pastebin"

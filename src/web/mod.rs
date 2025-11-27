@@ -1,5 +1,5 @@
 use axum::{
-    extract::DefaultBodyLimit,
+    extract::{DefaultBodyLimit, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
@@ -79,11 +79,40 @@ pub fn create_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-async fn health_check() -> Json<serde_json::Value> {
-    Json(serde_json::json!({
-        "status": "ok",
-        "version": env!("CARGO_PKG_VERSION"),
-    }))
+/// Health check response
+#[derive(Debug, Serialize)]
+pub struct HealthResponse {
+    pub status: String,
+    pub version: String,
+    pub database: String,
+    pub url_queue_size: usize,
+    pub timestamp: i64,
+}
+
+async fn health_check(State(state): State<AppState>) -> Json<HealthResponse> {
+    // Check database connectivity
+    let db_status = match state.db.lock() {
+        Ok(db) => match db.get_paste_count() {
+            Ok(_) => "connected".to_string(),
+            Err(e) => format!("error: {}", e),
+        },
+        Err(_) => "lock_error".to_string(),
+    };
+
+    // Get URL queue size if available
+    let queue_size = state
+        .url_scraper
+        .as_ref()
+        .map(|s| s.queue_size())
+        .unwrap_or(0);
+
+    Json(HealthResponse {
+        status: "ok".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        database: db_status,
+        url_queue_size: queue_size,
+        timestamp: chrono::Utc::now().timestamp(),
+    })
 }
 
 #[cfg(test)]

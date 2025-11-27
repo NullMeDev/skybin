@@ -258,7 +258,7 @@ pub async fn statistics(
         .get_sensitive_paste_count()
         .map_err(|e| ApiError(format!("Failed to get sensitive paste count: {}", e)))?;
 
-    // Get counts by source
+    // Get counts by source (all 13 scrapers + web uploads)
     let sources = vec![
         "pastebin",
         "gists",
@@ -269,6 +269,11 @@ pub async fn statistics(
         "dpaste",
         "hastebin",
         "ubuntu_pastebin",
+        "ixio",
+        "justpaste",
+        "controlc",
+        "external",
+        "external_url",
         "web",
     ];
     let mut by_source = std::collections::HashMap::new();
