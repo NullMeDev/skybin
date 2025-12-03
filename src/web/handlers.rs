@@ -1,22 +1,35 @@
-use askama::Template;
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{header, StatusCode},
+    response::{Html, IntoResponse},
     Json,
 };
 use serde::{Deserialize, Serialize};
 
 use super::{ApiError, ApiResponse, AppState};
-use crate::models::SearchFilters;
+use crate::models::{PatternMatch, SearchFilters};
 
 #[derive(Debug, Serialize)]
-pub struct PasteResponse {
+pub struct PasteListItem {
     pub id: String,
     pub title: Option<String>,
     pub source: String,
     pub syntax: String,
     pub created_at: i64,
     pub is_sensitive: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PasteDetail {
+    pub id: String,
+    pub title: Option<String>,
+    pub source: String,
+    pub syntax: String,
+    pub content: String,
+    pub created_at: i64,
+    pub is_sensitive: bool,
+    pub matched_patterns: Vec<PatternMatch>,
+    pub view_count: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -42,43 +55,50 @@ pub struct SeverityStats {
     pub low: i64,
 }
 
-// Askama Templates
-#[derive(Template)]
-#[template(path = "dashboard.html")]
-pub struct DashboardTemplate;
-
-#[derive(Template)]
-#[template(path = "paste_detail.html")]
-pub struct PasteDetailTemplate;
-
-#[derive(Template)]
-#[template(path = "search.html")]
-pub struct SearchTemplate;
-
-#[derive(Template)]
-#[template(path = "upload.html")]
-pub struct UploadTemplate;
+// Static HTML file serving
+const INDEX_HTML: &str = include_str!("../../static/index.html");
+const SEARCH_HTML: &str = include_str!("../../static/search.html");
+const UPLOAD_HTML: &str = include_str!("../../static/upload.html");
+const PASTE_HTML: &str = include_str!("../../static/paste.html");
 
 /// GET / - Dashboard HTML page
-pub async fn feed() -> impl axum::response::IntoResponse {
-    DashboardTemplate
+pub async fn serve_index() -> impl IntoResponse {
+    Html(INDEX_HTML)
+}
+
+/// GET /search - Search HTML page
+pub async fn serve_search() -> impl IntoResponse {
+    Html(SEARCH_HTML)
+}
+
+/// GET /upload - Upload HTML page  
+pub async fn serve_upload() -> impl IntoResponse {
+    Html(UPLOAD_HTML)
+}
+
+/// GET /paste/:id - Paste detail HTML page
+pub async fn serve_paste() -> impl IntoResponse {
+    Html(PASTE_HTML)
 }
 
 /// GET /api/pastes - Recent pastes feed (JSON API)
 pub async fn get_pastes(
     State(state): State<AppState>,
-) -> Result<Json<ApiResponse<Vec<PasteResponse>>>, ApiError> {
+    Query(filters): Query<SearchFilters>,
+) -> Result<Json<ApiResponse<Vec<PasteListItem>>>, ApiError> {
     let db = state
         .db
         .lock()
         .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let limit = filters.limit.unwrap_or(50).min(100) as usize;
     let pastes = db
-        .get_recent_pastes(50)
+        .get_recent_pastes(limit)
         .map_err(|e| ApiError(format!("Failed to fetch pastes: {}", e)))?;
 
     let responses = pastes
         .into_iter()
-        .map(|p| PasteResponse {
+        .map(|p| PasteListItem {
             id: p.id,
             title: p.title,
             source: p.source,
@@ -91,16 +111,11 @@ pub async fn get_pastes(
     Ok(Json(ApiResponse::ok(responses)))
 }
 
-/// GET /paste/:id - View individual paste (HTML page)
-pub async fn view_paste() -> impl axum::response::IntoResponse {
-    PasteDetailTemplate
-}
-
-/// GET /api/paste/:id - View individual paste (JSON API)
-pub async fn get_paste(
+/// GET /api/paste/:id - Get paste details (JSON API)
+pub async fn get_paste_api(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<Json<ApiResponse<PasteResponse>>, ApiError> {
+) -> Result<Json<ApiResponse<PasteDetail>>, ApiError> {
     let mut db = state
         .db
         .lock()
@@ -113,13 +128,18 @@ pub async fn get_paste(
     // Increment view count
     let _ = db.increment_view_count(&id);
 
-    let response = PasteResponse {
+    let patterns = paste.matched_patterns.unwrap_or_default();
+
+    let response = PasteDetail {
         id: paste.id,
         title: paste.title,
         source: paste.source,
         syntax: paste.syntax,
+        content: paste.content,
         created_at: paste.created_at,
         is_sensitive: paste.is_sensitive,
+        matched_patterns: patterns,
+        view_count: paste.view_count,
     };
 
     Ok(Json(ApiResponse::ok(response)))
@@ -129,7 +149,7 @@ pub async fn get_paste(
 pub async fn raw_paste(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> Result<String, StatusCode> {
+) -> Result<impl IntoResponse, StatusCode> {
     let mut db = state
         .db
         .lock()
@@ -142,14 +162,23 @@ pub async fn raw_paste(
     // Increment view count
     let _ = db.increment_view_count(&id);
 
-    Ok(paste.content)
+    Ok((
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        paste.content,
+    ))
 }
 
-/// POST /api/upload - Submit new paste (JSON API)
+#[derive(Debug, Serialize)]
+pub struct CreatePasteResponse {
+    pub id: String,
+    pub url: String,
+}
+
+/// POST /api/paste - Submit new paste (JSON API)
 pub async fn upload_paste_json(
     State(state): State<AppState>,
     Json(payload): Json<UploadRequest>,
-) -> Result<(StatusCode, Json<ApiResponse<String>>), ApiError> {
+) -> Result<(StatusCode, Json<ApiResponse<CreatePasteResponse>>), ApiError> {
     use chrono::Utc;
     use uuid::Uuid;
 
@@ -205,19 +234,18 @@ pub async fn upload_paste_json(
     db.insert_paste(&paste)
         .map_err(|e| ApiError(format!("Failed to store paste: {}", e)))?;
 
-    Ok((StatusCode::CREATED, Json(ApiResponse::ok(id))))
-}
-
-/// GET /search - Search page HTML
-pub async fn search() -> impl axum::response::IntoResponse {
-    SearchTemplate
+    let response = CreatePasteResponse {
+        id: id.clone(),
+        url: format!("/paste/{}", id),
+    };
+    Ok((StatusCode::CREATED, Json(ApiResponse::ok(response))))
 }
 
 /// GET /api/search - Full-text search (JSON API)
 pub async fn search_api(
     State(state): State<AppState>,
     Query(filters): Query<SearchFilters>,
-) -> Result<Json<ApiResponse<Vec<PasteResponse>>>, ApiError> {
+) -> Result<Json<ApiResponse<Vec<PasteListItem>>>, ApiError> {
     let db = state
         .db
         .lock()
@@ -228,7 +256,7 @@ pub async fn search_api(
 
     let responses = pastes
         .into_iter()
-        .map(|p| PasteResponse {
+        .map(|p| PasteListItem {
             id: p.id,
             title: p.title,
             source: p.source,
@@ -316,11 +344,6 @@ pub async fn statistics(
     };
 
     Ok(Json(ApiResponse::ok(stats)))
-}
-
-/// GET /upload - Upload page HTML
-pub async fn upload_page() -> impl axum::response::IntoResponse {
-    UploadTemplate
 }
 
 /// Request body for submitting URLs

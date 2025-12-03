@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload - SkyBin</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <a href="/" class="logo">SkyBin <span>v0.3.0</span></a>
+            <ul class="nav-links">
+                <li><a href="/">Feed</a></li>
+                <li><a href="/search">Search</a></li>
+                <li><a href="/upload" class="active">Upload</a></li>
+                <li><a href="https://github.com/NullMeDev/skybin" target="_blank">GitHub</a></li>
+            </ul>
+            <a href="/upload" class="btn btn-primary btn-sm">New Paste</a>
+        </div>
+    </nav>
+
+    <main class="page">
+        <div class="container-narrow">
+            <div class="page-header">
+                <h1>New Paste</h1>
+                <p>Submit content anonymously. No account required, no IP logging.</p>
+            </div>
+
+            <form class="upload-form" id="upload-form">
+                <div class="form-group">
+                    <label class="form-label">Title (optional)</label>
+                    <input type="text" class="form-input" id="title" placeholder="Untitled">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Syntax</label>
+                        <select class="form-input form-select" id="syntax">
+                            <option value="plaintext">Plain Text</option>
+                            <option value="javascript">JavaScript</option>
+                            <option value="typescript">TypeScript</option>
+                            <option value="python">Python</option>
+                            <option value="rust">Rust</option>
+                            <option value="go">Go</option>
+                            <option value="java">Java</option>
+                            <option value="c">C</option>
+                            <option value="cpp">C++</option>
+                            <option value="csharp">C#</option>
+                            <option value="php">PHP</option>
+                            <option value="ruby">Ruby</option>
+                            <option value="swift">Swift</option>
+                            <option value="kotlin">Kotlin</option>
+                            <option value="html">HTML</option>
+                            <option value="css">CSS</option>
+                            <option value="sql">SQL</option>
+                            <option value="bash">Bash</option>
+                            <option value="json">JSON</option>
+                            <option value="yaml">YAML</option>
+                            <option value="xml">XML</option>
+                            <option value="markdown">Markdown</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Expiration</label>
+                        <select class="form-input form-select" id="expiration">
+                            <option value="0">Never</option>
+                            <option value="600">10 minutes</option>
+                            <option value="3600">1 hour</option>
+                            <option value="86400" selected>1 day</option>
+                            <option value="604800">1 week</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Content</label>
+                    <textarea class="form-input form-textarea" id="content" placeholder="Paste your content here..." required></textarea>
+                    <p class="form-hint">Max 512KB. Sensitive patterns will be automatically detected.</p>
+                </div>
+
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary" id="submit-btn">Create Paste</button>
+                </div>
+            </form>
+
+            <div style="margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--border);">
+                <h3 style="font-size: 14px; margin-bottom: 12px;">Submit External URL</h3>
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+                    Monitor a paste from another site by submitting its URL.
+                </p>
+                <div class="search-box" style="margin-bottom: 0;">
+                    <input type="url" class="search-input" id="url-input" placeholder="https://pastebin.com/...">
+                    <button class="btn btn-secondary" id="url-btn">Submit URL</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div>SkyBin - Secure Paste Aggregator</div>
+                <ul class="footer-links">
+                    <li><a href="/api/health">API Status</a></li>
+                    <li><a href="https://nullmedev.github.io/skybin/">Documentation</a></li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast show ${type}`;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        document.getElementById('upload-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const btn = document.getElementById('submit-btn');
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+
+            const title = document.getElementById('title').value.trim() || 'Untitled';
+            const content = document.getElementById('content').value;
+            const syntax = document.getElementById('syntax').value;
+            const expiration = parseInt(document.getElementById('expiration').value);
+
+            if (!content) {
+                showToast('Content is required', 'error');
+                btn.disabled = false;
+                btn.textContent = 'Create Paste';
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/paste', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title,
+                        content,
+                        syntax,
+                        expires_in: expiration || null
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.success && data.data && data.data.id) {
+                    showToast('Paste created successfully');
+                    setTimeout(() => {
+                        window.location.href = `/paste/${data.data.id}`;
+                    }, 500);
+                } else {
+                    throw new Error(data.error || 'Failed to create paste');
+                }
+            } catch (e) {
+                showToast(e.message || 'Failed to create paste', 'error');
+                btn.disabled = false;
+                btn.textContent = 'Create Paste';
+            }
+        });
+
+        document.getElementById('url-btn').addEventListener('click', async () => {
+            const urlInput = document.getElementById('url-input');
+            const url = urlInput.value.trim();
+            const btn = document.getElementById('url-btn');
+
+            if (!url) {
+                showToast('Please enter a URL', 'error');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Submitting...';
+
+            try {
+                const res = await fetch('/api/submit-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, urls: [] })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    showToast('URL submitted for processing');
+                    urlInput.value = '';
+                } else {
+                    throw new Error(data.error || 'Failed to submit URL');
+                }
+            } catch (e) {
+                showToast(e.message || 'Failed to submit URL', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Submit URL';
+            }
+        });
+
+        // Handle Enter key on URL input
+        document.getElementById('url-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('url-btn').click();
+            }
+        });
+    </script>
+</body>
+</html>

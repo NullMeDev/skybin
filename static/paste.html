@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paste - SkyBin</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <a href="/" class="logo">SkyBin <span>v0.3.0</span></a>
+            <ul class="nav-links">
+                <li><a href="/">Feed</a></li>
+                <li><a href="/search">Search</a></li>
+                <li><a href="/upload">Upload</a></li>
+                <li><a href="https://github.com/NullMeDev/skybin" target="_blank">GitHub</a></li>
+            </ul>
+            <a href="/upload" class="btn btn-primary btn-sm">New Paste</a>
+        </div>
+    </nav>
+
+    <main class="page">
+        <div class="container">
+            <div id="paste-container">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Loading paste...
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div>SkyBin - Secure Paste Aggregator</div>
+                <ul class="footer-links">
+                    <li><a href="/api/health">API Status</a></li>
+                    <li><a href="https://nullmedev.github.io/skybin/">Documentation</a></li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        function getPasteId() {
+            const path = window.location.pathname;
+            const match = path.match(/\/paste\/([a-f0-9-]+)/);
+            return match ? match[1] : null;
+        }
+
+        function formatDate(timestamp) {
+            return new Date(timestamp * 1000).toLocaleString();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getSeverityClass(severity) {
+            const map = {
+                'critical': 'badge-critical',
+                'high': 'badge-high',
+                'moderate': 'badge-moderate',
+                'low': 'badge-low'
+            };
+            return map[severity] || 'badge-source';
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast show ${type}`;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        async function copyToClipboard(text) {
+            try {
+                await navigator.clipboard.writeText(text);
+                showToast('Copied to clipboard');
+            } catch (e) {
+                showToast('Failed to copy', 'error');
+            }
+        }
+
+        async function loadPaste() {
+            const container = document.getElementById('paste-container');
+            const pasteId = getPasteId();
+
+            if (!pasteId) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>Invalid paste ID</h3>
+                        <p>The paste you're looking for doesn't exist.</p>
+                        <a href="/" class="btn btn-secondary">Back to Feed</a>
+                    </div>
+                `;
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/paste/${pasteId}`);
+                const data = await res.json();
+
+                if (!data.success || !data.data) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <h3>Paste not found</h3>
+                            <p>This paste may have been deleted or expired.</p>
+                            <a href="/" class="btn btn-secondary">Back to Feed</a>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const paste = data.data;
+                document.title = `${paste.title || 'Untitled'} - SkyBin`;
+
+                let patternsHtml = '';
+                if (paste.matched_patterns && paste.matched_patterns.length > 0) {
+                    const patternTags = paste.matched_patterns.map(p => `
+                        <div class="pattern-tag">
+                            <span class="badge ${getSeverityClass(p.severity)}">${p.severity}</span>
+                            ${escapeHtml(p.name)}
+                        </div>
+                    `).join('');
+                    
+                    patternsHtml = `
+                        <div class="paste-patterns">
+                            <h3>Detected Patterns</h3>
+                            <div class="pattern-list">${patternTags}</div>
+                        </div>
+                    `;
+                }
+
+                container.innerHTML = `
+                    <div style="margin-bottom: 16px;">
+                        <a href="/" class="btn btn-secondary btn-sm">Back to Feed</a>
+                    </div>
+                    
+                    <div class="paste-detail">
+                        <div class="paste-detail-header">
+                            <div>
+                                <h1 class="paste-detail-title">${escapeHtml(paste.title || 'Untitled')}</h1>
+                                <div class="paste-detail-meta">
+                                    <span>Source: ${paste.source}</span>
+                                    <span>Syntax: ${paste.syntax || 'plaintext'}</span>
+                                    <span>Created: ${formatDate(paste.created_at)}</span>
+                                    ${paste.is_sensitive ? '<span class="badge badge-sensitive">Sensitive</span>' : ''}
+                                </div>
+                            </div>
+                            <div class="paste-detail-actions">
+                                <button class="btn btn-secondary btn-sm" onclick="copyToClipboard(document.getElementById('paste-content').textContent)">
+                                    Copy
+                                </button>
+                                <a href="/raw/${paste.id}" class="btn btn-secondary btn-sm" target="_blank">
+                                    Raw
+                                </a>
+                            </div>
+                        </div>
+                        <pre class="paste-content" id="paste-content">${escapeHtml(paste.content)}</pre>
+                        ${patternsHtml}
+                    </div>
+                `;
+
+            } catch (e) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>Failed to load paste</h3>
+                        <p>Could not connect to the API.</p>
+                        <button class="btn btn-secondary" onclick="loadPaste()">Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        loadPaste();
+    </script>
+</body>
+</html>

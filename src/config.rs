@@ -66,6 +66,14 @@ pub struct SourcesConfig {
     pub justpaste: bool,
     #[serde(default)]
     pub controlc: bool,
+    #[serde(default)]
+    pub pastecode: bool,
+    #[serde(default)]
+    pub dpaste_org: bool,
+    #[serde(default)]
+    pub defuse: bool,
+    #[serde(default)]
+    pub codepad: bool,
 }
 
 impl SourcesConfig {
@@ -108,6 +116,18 @@ impl SourcesConfig {
         if self.controlc {
             sources.push("controlc");
         }
+        if self.pastecode {
+            sources.push("pastecode");
+        }
+        if self.dpaste_org {
+            sources.push("dpaste_org");
+        }
+        if self.defuse {
+            sources.push("defuse");
+        }
+        if self.codepad {
+            sources.push("codepad");
+        }
         sources
     }
 }
@@ -128,8 +148,24 @@ pub struct PatternsConfig {
     pub private_keys: bool,
     pub db_credentials: bool,
     pub generic_api_keys: bool,
+    #[serde(default = "default_true")]
+    pub discord_tokens: bool,
+    #[serde(default = "default_true")]
+    pub oauth_tokens: bool,
+    #[serde(default = "default_true")]
+    pub streaming_creds: bool,
+    #[serde(default = "default_true")]
+    pub jwt_tokens: bool,
+    #[serde(default = "default_true")]
+    pub payment_keys: bool,
+    #[serde(default = "default_true")]
+    pub cloud_tokens: bool,
     #[serde(default)]
     pub custom: Vec<CustomPattern>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

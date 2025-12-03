@@ -8,6 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tower_http::compression::CompressionLayer;
+use tower_http::services::ServeDir;
 
 pub mod handlers;
 
@@ -59,19 +60,22 @@ impl IntoResponse for ApiError {
 /// Create the Axum router with all routes
 pub fn create_router(state: AppState) -> Router {
     Router::new()
-        // HTML pages
-        .route("/", get(handlers::feed))
-        .route("/search", get(handlers::search))
-        .route("/upload", get(handlers::upload_page))
-        .route("/paste/:id", get(handlers::view_paste))
+        // HTML pages (serve static files)
+        .route("/", get(handlers::serve_index))
+        .route("/search", get(handlers::serve_search))
+        .route("/upload", get(handlers::serve_upload))
+        .route("/paste/:id", get(handlers::serve_paste))
         .route("/raw/:id", get(handlers::raw_paste))
+        // Static assets
+        .nest_service("/static", ServeDir::new("static"))
         // API endpoints
         .route("/api/pastes", get(handlers::get_pastes))
         .route("/api/search", get(handlers::search_api))
         .route("/api/stats", get(handlers::statistics))
         .route("/api/health", get(health_check))
-        .route("/api/paste/:id", get(handlers::get_paste))
+        .route("/api/paste/:id", get(handlers::get_paste_api))
         // POST endpoints
+        .route("/api/paste", post(handlers::upload_paste_json))
         .route("/api/upload", post(handlers::upload_paste_json))
         .route("/api/submit-url", post(handlers::submit_url))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB limit

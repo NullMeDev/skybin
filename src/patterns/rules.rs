@@ -206,6 +206,325 @@ lazy_static! {
             ).unwrap(),
         );
 
+        // Discord Tokens
+        m.insert(
+            "discord_token".to_string(),
+            PatternRule::new(
+                "Discord Token",
+                r"[MN][A-Za-z\d]{23,}\.[\w-]{6}\.[\w-]{27}",
+                Severity::Critical,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Discord Webhook
+        m.insert(
+            "discord_webhook".to_string(),
+            PatternRule::new(
+                "Discord Webhook",
+                r"https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/\d+/[\w-]+",
+                Severity::High,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Telegram Bot Token
+        m.insert(
+            "telegram_token".to_string(),
+            PatternRule::new(
+                "Telegram Bot Token",
+                r"\d{8,10}:[A-Za-z0-9_-]{35}",
+                Severity::Critical,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Twitch OAuth Token
+        m.insert(
+            "twitch_token".to_string(),
+            PatternRule::new(
+                "Twitch OAuth Token",
+                r"(?i)oauth:[a-z0-9]{30}",
+                Severity::Critical,
+                "streaming",
+            ).unwrap(),
+        );
+
+        // Spotify Client Secret
+        m.insert(
+            "spotify_secret".to_string(),
+            PatternRule::new(
+                "Spotify Client Secret",
+                r"(?i)spotify[_-]?(?:client[_-]?)?secret\s*[:=]\s*[a-f0-9]{32}",
+                Severity::High,
+                "streaming",
+            ).unwrap(),
+        );
+
+        // Netflix Cookies/Tokens
+        m.insert(
+            "netflix_cookie".to_string(),
+            PatternRule::new(
+                "Netflix Session",
+                r"(?i)NetflixId=[A-Za-z0-9%_-]{50,}",
+                Severity::Critical,
+                "streaming",
+            ).unwrap(),
+        );
+
+        // YouTube API Key
+        m.insert(
+            "youtube_key".to_string(),
+            PatternRule::new(
+                "YouTube API Key",
+                r"AIza[0-9A-Za-z\-_]{35}",
+                Severity::High,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Google OAuth Token
+        m.insert(
+            "google_oauth".to_string(),
+            PatternRule::new(
+                "Google OAuth Token",
+                r"ya29\.[0-9A-Za-z\-_]+",
+                Severity::Critical,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Facebook Access Token
+        m.insert(
+            "facebook_token".to_string(),
+            PatternRule::new(
+                "Facebook Access Token",
+                r"EAA[A-Za-z0-9]{100,}",
+                Severity::Critical,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Twitter Bearer Token
+        m.insert(
+            "twitter_bearer".to_string(),
+            PatternRule::new(
+                "Twitter Bearer Token",
+                r"AAAAAAAAAAAAAAAAAAAAAA[A-Za-z0-9%]{40,}",
+                Severity::Critical,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Heroku API Key
+        m.insert(
+            "heroku_key".to_string(),
+            PatternRule::new(
+                "Heroku API Key",
+                r"(?i)heroku[_-]?api[_-]?key\s*[:=]\s*[a-f0-9-]{36}",
+                Severity::Critical,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Sendgrid API Key
+        m.insert(
+            "sendgrid_key".to_string(),
+            PatternRule::new(
+                "Sendgrid API Key",
+                r"SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}",
+                Severity::Critical,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Square Access Token
+        m.insert(
+            "square_token".to_string(),
+            PatternRule::new(
+                "Square Access Token",
+                r"sq0atp-[0-9A-Za-z\-_]{22}",
+                Severity::Critical,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // PayPal Client Secret
+        m.insert(
+            "paypal_secret".to_string(),
+            PatternRule::new(
+                "PayPal Client Secret",
+                r"(?i)paypal[_-]?(?:client[_-]?)?secret\s*[:=]\s*[A-Za-z0-9_-]{40,}",
+                Severity::Critical,
+                "financial",
+            ).unwrap(),
+        );
+
+        // DigitalOcean Token
+        m.insert(
+            "digitalocean_token".to_string(),
+            PatternRule::new(
+                "DigitalOcean Token",
+                r"dop_v1_[a-f0-9]{64}",
+                Severity::Critical,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Azure Storage Key
+        m.insert(
+            "azure_storage".to_string(),
+            PatternRule::new(
+                "Azure Storage Key",
+                r"(?i)AccountKey=[A-Za-z0-9+/=]{88}",
+                Severity::Critical,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // JWT Token
+        m.insert(
+            "jwt_token".to_string(),
+            PatternRule::new(
+                "JWT Token",
+                r"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}",
+                Severity::High,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Generic Password in Config
+        m.insert(
+            "password_config".to_string(),
+            PatternRule::new(
+                "Password in Config",
+                r#"(?i)(?:password|passwd|pwd)\s*[:=]\s*['"]?[^\s'"]{8,}['"]?"#,
+                Severity::High,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Bearer Token
+        m.insert(
+            "bearer_token".to_string(),
+            PatternRule::new(
+                "Bearer Token",
+                r"(?i)bearer\s+[A-Za-z0-9\-_\.]{20,}",
+                Severity::High,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // NPM Token
+        m.insert(
+            "npm_token".to_string(),
+            PatternRule::new(
+                "NPM Token",
+                r"npm_[A-Za-z0-9]{36}",
+                Severity::Critical,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Docker Registry Auth
+        m.insert(
+            "docker_auth".to_string(),
+            PatternRule::new(
+                "Docker Registry Auth",
+                r"(?i)docker[_-]?(?:auth|password|token)\s*[:=]\s*[A-Za-z0-9+/=]{20,}",
+                Severity::Critical,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Crunchyroll Credentials
+        m.insert(
+            "crunchyroll_creds".to_string(),
+            PatternRule::new(
+                "Crunchyroll Credentials",
+                r"(?i)crunchyroll[_-]?(?:user|pass|email|token)\s*[:=]\s*[^\s]+",
+                Severity::High,
+                "streaming",
+            ).unwrap(),
+        );
+
+        // Hulu Token
+        m.insert(
+            "hulu_token".to_string(),
+            PatternRule::new(
+                "Hulu Session",
+                r"(?i)hulu[_-]?(?:session|token|auth)\s*[:=]\s*[A-Za-z0-9_-]{30,}",
+                Severity::Critical,
+                "streaming",
+            ).unwrap(),
+        );
+
+        // Disney+ Token
+        m.insert(
+            "disney_token".to_string(),
+            PatternRule::new(
+                "Disney+ Session",
+                r"(?i)disney[_-]?(?:plus|session|token|auth)\s*[:=]\s*[A-Za-z0-9_-]{30,}",
+                Severity::Critical,
+                "streaming",
+            ).unwrap(),
+        );
+
+        // HBO Max Token
+        m.insert(
+            "hbo_token".to_string(),
+            PatternRule::new(
+                "HBO Max Session",
+                r"(?i)hbo[_-]?(?:max)?[_-]?(?:session|token|auth)\s*[:=]\s*[A-Za-z0-9_-]{30,}",
+                Severity::Critical,
+                "streaming",
+            ).unwrap(),
+        );
+
+        // Steam API Key
+        m.insert(
+            "steam_key".to_string(),
+            PatternRule::new(
+                "Steam API Key",
+                r"[0-9A-F]{32}",
+                Severity::High,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // VPN Config Credentials
+        m.insert(
+            "vpn_creds".to_string(),
+            PatternRule::new(
+                "VPN Credentials",
+                r"(?i)(?:openvpn|wireguard|vpn)[_-]?(?:user|pass|key|auth)\s*[:=]\s*[^\s]+",
+                Severity::High,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Cloudflare API Token
+        m.insert(
+            "cloudflare_token".to_string(),
+            PatternRule::new(
+                "Cloudflare API Token",
+                r"[A-Za-z0-9_-]{40}",
+                Severity::High,
+                "credentials",
+            ).unwrap(),
+        );
+
+        // Generic Secret Key
+        m.insert(
+            "secret_key".to_string(),
+            PatternRule::new(
+                "Secret Key",
+                r"(?i)secret[_-]?key\s*[:=]\s*[A-Za-z0-9_-]{20,}",
+                Severity::High,
+                "credentials",
+            ).unwrap(),
+        );
+
         m
     };
 }
@@ -244,6 +563,45 @@ pub fn get_enabled_patterns(
     }
     if config.ip_cidr {
         patterns.push(BUILTIN_PATTERNS["private_ip_cidr"].clone());
+    }
+    if config.discord_tokens {
+        patterns.push(BUILTIN_PATTERNS["discord_token"].clone());
+        patterns.push(BUILTIN_PATTERNS["discord_webhook"].clone());
+        patterns.push(BUILTIN_PATTERNS["telegram_token"].clone());
+    }
+    if config.oauth_tokens {
+        patterns.push(BUILTIN_PATTERNS["google_oauth"].clone());
+        patterns.push(BUILTIN_PATTERNS["facebook_token"].clone());
+        patterns.push(BUILTIN_PATTERNS["twitter_bearer"].clone());
+        patterns.push(BUILTIN_PATTERNS["bearer_token"].clone());
+    }
+    if config.streaming_creds {
+        patterns.push(BUILTIN_PATTERNS["twitch_token"].clone());
+        patterns.push(BUILTIN_PATTERNS["spotify_secret"].clone());
+        patterns.push(BUILTIN_PATTERNS["netflix_cookie"].clone());
+        patterns.push(BUILTIN_PATTERNS["crunchyroll_creds"].clone());
+        patterns.push(BUILTIN_PATTERNS["hulu_token"].clone());
+        patterns.push(BUILTIN_PATTERNS["disney_token"].clone());
+        patterns.push(BUILTIN_PATTERNS["hbo_token"].clone());
+    }
+    if config.jwt_tokens {
+        patterns.push(BUILTIN_PATTERNS["jwt_token"].clone());
+    }
+    if config.payment_keys {
+        patterns.push(BUILTIN_PATTERNS["square_token"].clone());
+        patterns.push(BUILTIN_PATTERNS["paypal_secret"].clone());
+    }
+    if config.cloud_tokens {
+        patterns.push(BUILTIN_PATTERNS["heroku_key"].clone());
+        patterns.push(BUILTIN_PATTERNS["sendgrid_key"].clone());
+        patterns.push(BUILTIN_PATTERNS["digitalocean_token"].clone());
+        patterns.push(BUILTIN_PATTERNS["azure_storage"].clone());
+        patterns.push(BUILTIN_PATTERNS["npm_token"].clone());
+        patterns.push(BUILTIN_PATTERNS["docker_auth"].clone());
+        patterns.push(BUILTIN_PATTERNS["youtube_key"].clone());
+        patterns.push(BUILTIN_PATTERNS["vpn_creds"].clone());
+        patterns.push(BUILTIN_PATTERNS["password_config"].clone());
+        patterns.push(BUILTIN_PATTERNS["secret_key"].clone());
     }
 
     // Add custom patterns

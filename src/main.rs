@@ -5,8 +5,9 @@ use paste_vault::rate_limiter::SourceRateLimiter;
 use paste_vault::scheduler::Scheduler;
 use paste_vault::scrapers::traits::Scraper;
 use paste_vault::scrapers::{
-    ControlcScraper, DPasteScraper, ExternalUrlScraper, GhostbinScraper, GitHubGistsScraper,
-    HastebinScraper, IxioScraper, JustPasteScraper, PasteEeScraper, PastebinScraper, RentryScraper,
+    CodepadScraper, ControlcScraper, DPasteScraper, DefuseScraper, DpasteOrgScraper,
+    ExternalUrlScraper, GhostbinScraper, GitHubGistsScraper, HastebinScraper, IxioScraper,
+    JustPasteScraper, PasteEeScraper, PastebinScraper, PastecodeScraper, RentryScraper,
     SlexyScraper, UbuntuPastebinScraper,
 };
 use paste_vault::web::{create_router, AppState};
@@ -127,6 +128,18 @@ async fn main() -> anyhow::Result<()> {
     }
     if config.sources.controlc {
         spawn_scraper("controlc", Box::new(ControlcScraper::new()));
+    }
+    if config.sources.pastecode {
+        spawn_scraper("pastecode", Box::new(PastecodeScraper::new()));
+    }
+    if config.sources.dpaste_org {
+        spawn_scraper("dpaste_org", Box::new(DpasteOrgScraper::new()));
+    }
+    if config.sources.defuse {
+        spawn_scraper("defuse", Box::new(DefuseScraper::new()));
+    }
+    if config.sources.codepad {
+        spawn_scraper("codepad", Box::new(CodepadScraper::new()));
     }
 
     // External URL scraper (always enabled for URL submissions)

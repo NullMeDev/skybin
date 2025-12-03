@@ -55,13 +55,19 @@ impl Scheduler {
         let patterns = self.detector.detect(&discovered.content);
         let is_sensitive = self.detector.is_sensitive(&discovered.content);
 
+        // Auto-generate title if missing or "Untitled"
+        let title = match &discovered.title {
+            Some(t) if !t.is_empty() && t.to_lowercase() != "untitled" => Some(t.clone()),
+            _ => Some(crate::auto_title::generate_title(&discovered.content)),
+        };
+
         // Create paste record
         let now = Utc::now().timestamp();
         let paste = Paste {
             id: Uuid::new_v4().to_string(),
             source: discovered.source,
             source_id: Some(discovered.source_id),
-            title: discovered.title,
+            title,
             author: discovered.author,
             content: discovered.content,
             content_hash,

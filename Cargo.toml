@@ -1,9 +1,9 @@
 [package]
 name = "paste-vault"
-version = "0.3.0"
+version = "1.0.0"
 edition = "2021"
-authors = ["PasteVault Team"]
-description = "A secure, multi-source paste aggregator and anonymous pastebin"
+authors = ["NullMe <dev@nullme.lol>"]
+description = "Multi-source paste aggregator with pattern detection"
 license = "MIT"
 
 [lib]

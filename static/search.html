@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search - SkyBin</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <a href="/" class="logo">SkyBin <span>v0.3.0</span></a>
+            <ul class="nav-links">
+                <li><a href="/">Feed</a></li>
+                <li><a href="/search" class="active">Search</a></li>
+                <li><a href="/upload">Upload</a></li>
+                <li><a href="https://github.com/NullMeDev/skybin" target="_blank">GitHub</a></li>
+            </ul>
+            <a href="/upload" class="btn btn-primary btn-sm">New Paste</a>
+        </div>
+    </nav>
+
+    <main class="page">
+        <div class="container">
+            <div class="page-header">
+                <h1>Search Pastes</h1>
+                <p>Full-text search across all collected pastes</p>
+            </div>
+
+            <div class="search-box">
+                <input type="text" class="search-input" id="search-input" placeholder="Search for keywords, code snippets, patterns..." autofocus>
+                <button class="btn btn-primary" id="search-btn">Search</button>
+            </div>
+
+            <div class="filters">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="sensitive">Sensitive Only</button>
+                <button class="filter-btn" data-filter="pastebin">Pastebin</button>
+                <button class="filter-btn" data-filter="gists">Gists</button>
+            </div>
+
+            <div id="results-container">
+                <div class="empty-state">
+                    <h3>Enter a search query</h3>
+                    <p>Search for keywords, code snippets, or patterns in paste content.</p>
+                </div>
+            </div>
+
+            <div class="pagination" id="pagination" style="display: none;">
+                <button id="prev-btn" disabled>Previous</button>
+                <button id="next-btn">Next</button>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div>SkyBin - Secure Paste Aggregator</div>
+                <ul class="footer-links">
+                    <li><a href="/api/health">API Status</a></li>
+                    <li><a href="https://nullmedev.github.io/skybin/">Documentation</a></li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const API_BASE = '/api';
+        let currentPage = 0;
+        let currentFilter = 'all';
+        let currentQuery = '';
+        const LIMIT = 25;
+
+        function formatTime(timestamp) {
+            const date = new Date(timestamp * 1000);
+            const now = new Date();
+            const diff = Math.floor((now - date) / 1000);
+            
+            if (diff < 60) return 'just now';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+            return date.toLocaleDateString();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function search() {
+            const query = document.getElementById('search-input').value.trim();
+            if (!query) return;
+
+            currentQuery = query;
+            currentPage = 0;
+            
+            // Update URL
+            const url = new URL(window.location);
+            url.searchParams.set('q', query);
+            window.history.pushState({}, '', url);
+
+            await loadResults();
+        }
+
+        async function loadResults() {
+            if (!currentQuery) return;
+
+            const container = document.getElementById('results-container');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
+
+            try {
+                let url = `${API_BASE}/search?q=${encodeURIComponent(currentQuery)}&limit=${LIMIT}&offset=${currentPage * LIMIT}`;
+                
+                if (currentFilter === 'sensitive') {
+                    url += '&sensitive=true';
+                } else if (currentFilter !== 'all') {
+                    url += `&source=${currentFilter}`;
+                }
+
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (!data.success || !data.data || data.data.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <h3>No results found</h3>
+                            <p>Try different keywords or remove filters.</p>
+                        </div>
+                    `;
+                    document.getElementById('pagination').style.display = 'none';
+                    return;
+                }
+
+                const html = data.data.map(paste => `
+                    <a href="/paste/${paste.id}" class="paste-item">
+                        <div class="paste-info">
+                            <div class="paste-title">${escapeHtml(paste.title || 'Untitled')}</div>
+                            <div class="paste-meta">
+                                <span>${paste.syntax || 'plaintext'}</span>
+                            </div>
+                        </div>
+                        <div class="paste-badges">
+                            ${paste.is_sensitive ? '<span class="badge badge-sensitive">Sensitive</span>' : ''}
+                            <span class="badge badge-source">${paste.source}</span>
+                        </div>
+                        <div class="paste-time">${formatTime(paste.created_at)}</div>
+                    </a>
+                `).join('');
+
+                container.innerHTML = `
+                    <div style="margin-bottom: 16px; font-size: 13px; color: var(--text-muted);">
+                        Found ${data.data.length}${data.data.length === LIMIT ? '+' : ''} results for "${escapeHtml(currentQuery)}"
+                    </div>
+                    <div class="paste-list">${html}</div>
+                `;
+
+                // Show pagination
+                const pagination = document.getElementById('pagination');
+                pagination.style.display = 'flex';
+                document.getElementById('prev-btn').disabled = currentPage === 0;
+                document.getElementById('next-btn').disabled = data.data.length < LIMIT;
+
+            } catch (e) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>Search failed</h3>
+                        <p>Could not connect to the API.</p>
+                        <button class="btn btn-secondary" onclick="loadResults()">Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        // Search on Enter
+        document.getElementById('search-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') search();
+        });
+
+        document.getElementById('search-btn').addEventListener('click', search);
+
+        // Filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.filter;
+                currentPage = 0;
+                if (currentQuery) loadResults();
+            });
+        });
+
+        // Pagination
+        document.getElementById('prev-btn').addEventListener('click', () => {
+            if (currentPage > 0) {
+                currentPage--;
+                loadResults();
+            }
+        });
+
+        document.getElementById('next-btn').addEventListener('click', () => {
+            currentPage++;
+            loadResults();
+        });
+
+        // Load from URL query
+        const urlParams = new URLSearchParams(window.location.search);
+        const q = urlParams.get('q');
+        if (q) {
+            document.getElementById('search-input').value = q;
+            currentQuery = q;
+            loadResults();
+        }
+    </script>
+</body>
+</html>

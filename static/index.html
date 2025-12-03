@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyBin</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <a href="/" class="logo">SkyBin <span>v0.3.0</span></a>
+            <ul class="nav-links">
+                <li><a href="/" class="active">Feed</a></li>
+                <li><a href="/search">Search</a></li>
+                <li><a href="/upload">Upload</a></li>
+                <li><a href="https://github.com/NullMeDev/skybin" target="_blank">GitHub</a></li>
+            </ul>
+            <a href="/upload" class="btn btn-primary btn-sm">New Paste</a>
+        </div>
+    </nav>
+
+    <main class="page">
+        <div class="container">
+            <div class="page-header">
+                <h1>Paste Feed</h1>
+                <p>Real-time aggregation from public paste sites</p>
+            </div>
+
+            <div class="stats-bar" id="stats-bar">
+                <div class="stat">
+                    <div class="stat-value" id="stat-total">--</div>
+                    <div class="stat-label">Total</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="stat-sensitive">--</div>
+                    <div class="stat-label">Sensitive</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="stat-recent">--</div>
+                    <div class="stat-label">Last 24h</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">13</div>
+                    <div class="stat-label">Sources</div>
+                </div>
+            </div>
+
+            <div class="filters">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="sensitive">Sensitive Only</button>
+                <button class="filter-btn" data-filter="pastebin">Pastebin</button>
+                <button class="filter-btn" data-filter="gists">Gists</button>
+                <button class="filter-btn" data-filter="external">External</button>
+            </div>
+
+            <div id="paste-container">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Loading pastes...
+                </div>
+            </div>
+
+            <div class="pagination" id="pagination" style="display: none;">
+                <button id="prev-btn" disabled>Previous</button>
+                <button id="next-btn">Next</button>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div>SkyBin - Secure Paste Aggregator</div>
+                <ul class="footer-links">
+                    <li><a href="/api/health">API Status</a></li>
+                    <li><a href="https://nullmedev.github.io/skybin/">Documentation</a></li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const API_BASE = '/api';
+        let currentPage = 0;
+        let currentFilter = 'all';
+        const LIMIT = 25;
+
+        function formatTime(timestamp) {
+            const date = new Date(timestamp * 1000);
+            const now = new Date();
+            const diff = Math.floor((now - date) / 1000);
+            
+            if (diff < 60) return 'just now';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+            return date.toLocaleDateString();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadStats() {
+            try {
+                const res = await fetch(`${API_BASE}/stats`);
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('stat-total').textContent = data.data.total_pastes.toLocaleString();
+                    document.getElementById('stat-sensitive').textContent = data.data.sensitive_pastes.toLocaleString();
+                    document.getElementById('stat-recent').textContent = data.data.recent_count.toLocaleString();
+                }
+            } catch (e) {
+                console.error('Failed to load stats:', e);
+            }
+        }
+
+        async function loadPastes() {
+            const container = document.getElementById('paste-container');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pastes...</div>';
+
+            try {
+                let url = `${API_BASE}/pastes?limit=${LIMIT}&offset=${currentPage * LIMIT}`;
+                
+                if (currentFilter === 'sensitive') {
+                    url += '&sensitive=true';
+                } else if (currentFilter !== 'all') {
+                    url += `&source=${currentFilter}`;
+                }
+
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (!data.success || !data.data || data.data.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <h3>No pastes found</h3>
+                            <p>Pastes will appear here as they are scraped from public sources.</p>
+                        </div>
+                    `;
+                    document.getElementById('pagination').style.display = 'none';
+                    return;
+                }
+
+                const html = data.data.map(paste => `
+                    <a href="/paste/${paste.id}" class="paste-item">
+                        <div class="paste-info">
+                            <div class="paste-title">${escapeHtml(paste.title || 'Untitled')}</div>
+                            <div class="paste-meta">
+                                <span>${paste.syntax || 'plaintext'}</span>
+                            </div>
+                        </div>
+                        <div class="paste-badges">
+                            ${paste.is_sensitive ? '<span class="badge badge-sensitive">Sensitive</span>' : ''}
+                            <span class="badge badge-source">${paste.source}</span>
+                        </div>
+                        <div class="paste-time">${formatTime(paste.created_at)}</div>
+                    </a>
+                `).join('');
+
+                container.innerHTML = `<div class="paste-list">${html}</div>`;
+                
+                // Show pagination
+                const pagination = document.getElementById('pagination');
+                pagination.style.display = 'flex';
+                document.getElementById('prev-btn').disabled = currentPage === 0;
+                document.getElementById('next-btn').disabled = data.data.length < LIMIT;
+
+            } catch (e) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>Failed to load pastes</h3>
+                        <p>Could not connect to the API. Make sure the server is running.</p>
+                        <button class="btn btn-secondary" onclick="loadPastes()">Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        // Filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.filter;
+                currentPage = 0;
+                loadPastes();
+            });
+        });
+
+        // Pagination
+        document.getElementById('prev-btn').addEventListener('click', () => {
+            if (currentPage > 0) {
+                currentPage--;
+                loadPastes();
+            }
+        });
+
+        document.getElementById('next-btn').addEventListener('click', () => {
+            currentPage++;
+            loadPastes();
+        });
+
+        // Initial load
+        loadStats();
+        loadPastes();
+
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            loadStats();
+            if (currentPage === 0) loadPastes();
+        }, 30000);
+    </script>
+</body>
+</html>

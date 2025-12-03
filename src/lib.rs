@@ -1,4 +1,5 @@
 pub mod anonymization;
+pub mod auto_title;
 pub mod config;
 pub mod db;
 pub mod hash;

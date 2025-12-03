@@ -1,6 +1,6 @@
 [server]
 host = "0.0.0.0"
-port = 8081
+port = 8082
 max_paste_size = 1_000_000  # 1MB max paste size
 
 [storage]
@@ -9,10 +9,10 @@ retention_days = 7
 max_pastes = 10000
 
 [scraping]
-interval_seconds = 300  # 5 minutes
-concurrent_scrapers = 5
-jitter_min_ms = 500
-jitter_max_ms = 5000
+interval_seconds = 60  # 1 minute - more frequent scraping
+concurrent_scrapers = 8
+jitter_min_ms = 200
+jitter_max_ms = 2000
 retries = 3
 backoff_ms = 500
 proxy = ""  # Optional: "http://proxy:port"
@@ -27,16 +27,20 @@ user_agents = [
 [sources]
 pastebin = true
 gists = true
-paste_ee = false  # API not available
-rentry = false  # No public recent API
-dpaste = false  # API not available
-hastebin = false  # No public recent API
-slexy = false  # Has recent page but may be unstable
-ubuntu_pastebin = false  # No public recent API
-ghostbin = false  # Service defunct since 2021
-ixio = false  # No public recent API
-justpaste = false  # No public recent API
-controlc = false  # Has recent page
+paste_ee = false
+rentry = false
+dpaste = false
+hastebin = true
+slexy = true
+ubuntu_pastebin = false
+ghostbin = false
+ixio = false
+justpaste = false
+controlc = true
+pastecode = true
+dpaste_org = true
+defuse = true
+codepad = true
 
 # Note: external_url scraper is always enabled
 # Submit paste URLs via POST /api/submit-url
@@ -57,14 +61,9 @@ ip_cidr = true
 private_keys = true
 db_credentials = true
 generic_api_keys = true
-
-# Custom patterns
-[[patterns.custom]]
-name = "Example Custom Pattern"
-regex = "(?i)\\bsupersecret\\b"
-severity = "moderate"
-
-# [[patterns.custom]]
-# name = "Another Pattern"
-# regex = "password\\s*[:=]\\s*\\S+"
-# severity = "high"
+discord_tokens = true
+oauth_tokens = true
+streaming_creds = true
+jwt_tokens = true
+payment_keys = true
+cloud_tokens = true
