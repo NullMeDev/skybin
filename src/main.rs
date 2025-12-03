@@ -5,10 +5,11 @@ use paste_vault::rate_limiter::SourceRateLimiter;
 use paste_vault::scheduler::Scheduler;
 use paste_vault::scrapers::traits::Scraper;
 use paste_vault::scrapers::{
-    CodepadScraper, ControlcScraper, DPasteScraper, DefuseScraper, DpasteOrgScraper,
-    ExternalUrlScraper, GhostbinScraper, GitHubGistsScraper, HastebinScraper, IxioScraper,
-    JustPasteScraper, PasteEeScraper, PastebinScraper, PastecodeScraper, RentryScraper,
-    SlexyScraper, UbuntuPastebinScraper,
+    BpasteScraper, CodepadScraper, ControlcScraper, DPasteScraper, DefuseScraper, DpasteOrgScraper,
+    ExternalUrlScraper, GhostbinScraper, GitHubGistsScraper, HastebinScraper, IdeoneScraper,
+    IxioScraper, JustPasteScraper, PasteEeScraper, PasteRsScraper, PastebinScraper,
+    PastecodeScraper, RentryScraper, SlexyScraper, SprungeScraper, TermbinScraper,
+    UbuntuPastebinScraper,
 };
 use paste_vault::web::{create_router, AppState};
 use std::sync::{Arc, Mutex};
@@ -140,6 +141,21 @@ async fn main() -> anyhow::Result<()> {
     }
     if config.sources.codepad {
         spawn_scraper("codepad", Box::new(CodepadScraper::new()));
+    }
+    if config.sources.ideone {
+        spawn_scraper("ideone", Box::new(IdeoneScraper::new()));
+    }
+    if config.sources.bpaste {
+        spawn_scraper("bpaste", Box::new(BpasteScraper::new()));
+    }
+    if config.sources.termbin {
+        spawn_scraper("termbin", Box::new(TermbinScraper::new()));
+    }
+    if config.sources.sprunge {
+        spawn_scraper("sprunge", Box::new(SprungeScraper::new()));
+    }
+    if config.sources.paste_rs {
+        spawn_scraper("paste_rs", Box::new(PasteRsScraper::new()));
     }
 
     // External URL scraper (always enabled for URL submissions)

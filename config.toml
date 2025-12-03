@@ -1,5 +1,5 @@
 [server]
-host = "0.0.0.0"
+host = "127.0.0.1"  # Only listen on localhost, nginx handles external traffic
 port = 8082
 max_paste_size = 1_000_000  # 1MB max paste size
 
@@ -9,10 +9,10 @@ retention_days = 7
 max_pastes = 10000
 
 [scraping]
-interval_seconds = 60  # 1 minute - more frequent scraping
-concurrent_scrapers = 8
-jitter_min_ms = 200
-jitter_max_ms = 2000
+interval_seconds = 45  # 45 seconds - aggressive scraping
+concurrent_scrapers = 16
+jitter_min_ms = 100
+jitter_max_ms = 1500
 retries = 3
 backoff_ms = 500
 proxy = ""  # Optional: "http://proxy:port"
@@ -41,6 +41,11 @@ pastecode = true
 dpaste_org = true
 defuse = true
 codepad = true
+ideone = true
+bpaste = true
+termbin = false
+sprunge = false
+paste_rs = false
 
 # Note: external_url scraper is always enabled
 # Submit paste URLs via POST /api/submit-url

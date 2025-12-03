@@ -74,6 +74,16 @@ pub struct SourcesConfig {
     pub defuse: bool,
     #[serde(default)]
     pub codepad: bool,
+    #[serde(default)]
+    pub ideone: bool,
+    #[serde(default)]
+    pub bpaste: bool,
+    #[serde(default)]
+    pub termbin: bool,
+    #[serde(default)]
+    pub sprunge: bool,
+    #[serde(default)]
+    pub paste_rs: bool,
 }
 
 impl SourcesConfig {
@@ -127,6 +137,21 @@ impl SourcesConfig {
         }
         if self.codepad {
             sources.push("codepad");
+        }
+        if self.ideone {
+            sources.push("ideone");
+        }
+        if self.bpaste {
+            sources.push("bpaste");
+        }
+        if self.termbin {
+            sources.push("termbin");
+        }
+        if self.sprunge {
+            sources.push("sprunge");
+        }
+        if self.paste_rs {
+            sources.push("paste_rs");
         }
         sources
     }
