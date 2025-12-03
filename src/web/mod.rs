@@ -79,6 +79,11 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/paste", post(handlers::upload_paste_json))
         .route("/api/upload", post(handlers::upload_paste_json))
         .route("/api/submit-url", post(handlers::submit_url))
+        // Comments
+        .route("/api/paste/:id/comments", get(handlers::get_comments).post(handlers::add_comment))
+        // Export
+        .route("/api/export/:id/json", get(handlers::export_json))
+        .route("/api/export/:id/csv", get(handlers::export_csv))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB limit
         .layer(CompressionLayer::new())
         .with_state(state)

@@ -107,3 +107,22 @@ pub struct SourceStat {
     pub source: String,
     pub count: i64,
 }
+
+/// Anonymous comment on a paste
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Comment {
+    pub id: String,
+    pub paste_id: String,
+    pub content: String,
+    pub created_at: i64,
+}
+
+/// Paste metadata for quality scoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PasteQuality {
+    pub language: String,
+    pub entropy_score: f64,
+    pub quality_score: u32,
+    pub is_combo_list: bool,
+    pub combo_count: usize,
+}

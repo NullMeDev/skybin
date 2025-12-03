@@ -5,11 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Paste - SkyBin</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .export-buttons { display: flex; gap: 8px; margin-top: 8px; }
+        .comments-section { margin-top: 24px; }
+        .comments-section h3 { margin-bottom: 16px; color: var(--text-primary); }
+        .comment-form { display: flex; gap: 8px; margin-bottom: 16px; }
+        .comment-form textarea { flex: 1; min-height: 60px; resize: vertical; }
+        .comment-list { display: flex; flex-direction: column; gap: 12px; }
+        .comment { background: var(--bg-secondary); padding: 12px; border-radius: 8px; border: 1px solid var(--border); }
+        .comment-meta { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+        .comment-content { color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
+        .no-comments { color: var(--text-muted); font-style: italic; }
+    </style>
 </head>
 <body>
     <nav>
         <div class="container">
-            <a href="/" class="logo">SkyBin <span>v1.0.0</span></a>
+            <a href="/" class="logo">SkyBin <span>v1.1.0</span></a>
             <ul class="nav-links">
                 <li><a href="/">Feed</a></li>
                 <li><a href="/search">Search</a></li>
@@ -164,10 +176,26 @@
                                 </a>
                             </div>
                         </div>
+                        <div class="export-buttons">
+                            <a href="/api/export/${paste.id}/json" class="btn btn-secondary btn-sm" download>Export JSON</a>
+                            <a href="/api/export/${paste.id}/csv" class="btn btn-secondary btn-sm" download>Export CSV</a>
+                        </div>
                         <pre class="paste-content" id="paste-content">${escapeHtml(paste.content)}</pre>
                         ${patternsHtml}
+                        
+                        <div class="comments-section">
+                            <h3>Comments</h3>
+                            <div class="comment-form">
+                                <textarea id="comment-input" placeholder="Add an anonymous comment..." maxlength="2000"></textarea>
+                                <button class="btn btn-primary btn-sm" onclick="submitComment()">Post</button>
+                            </div>
+                            <div class="comment-list" id="comments-list">
+                                <div class="loading"><div class="spinner"></div>Loading comments...</div>
+                            </div>
+                        </div>
                     </div>
                 `;
+                loadComments(pasteId);
 
             } catch (e) {
                 container.innerHTML = `
@@ -177,6 +205,55 @@
                         <button class="btn btn-secondary" onclick="loadPaste()">Retry</button>
                     </div>
                 `;
+            }
+        }
+
+        async function loadComments(pasteId) {
+            const container = document.getElementById('comments-list');
+            try {
+                const res = await fetch(`/api/paste/${pasteId}/comments`);
+                const data = await res.json();
+                if (data.success && data.data) {
+                    if (data.data.length === 0) {
+                        container.innerHTML = '<div class="no-comments">No comments yet. Be the first to comment!</div>';
+                    } else {
+                        container.innerHTML = data.data.map(c => `
+                            <div class="comment">
+                                <div class="comment-meta">Anonymous • ${formatDate(c.created_at)}</div>
+                                <div class="comment-content">${escapeHtml(c.content)}</div>
+                            </div>
+                        `).join('');
+                    }
+                }
+            } catch (e) {
+                container.innerHTML = '<div class="no-comments">Failed to load comments</div>';
+            }
+        }
+
+        async function submitComment() {
+            const input = document.getElementById('comment-input');
+            const content = input.value.trim();
+            if (!content) {
+                showToast('Comment cannot be empty', 'error');
+                return;
+            }
+            const pasteId = getPasteId();
+            try {
+                const res = await fetch(`/api/paste/${pasteId}/comments`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    input.value = '';
+                    showToast('Comment posted!');
+                    loadComments(pasteId);
+                } else {
+                    showToast(data.error || 'Failed to post comment', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to post comment', 'error');
             }
         }
 

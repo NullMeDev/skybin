@@ -25,30 +25,31 @@ user_agents = [
 ]
 
 [sources]
-pastebin = true
-gists = true
-paste_ee = false
-rentry = false
-dpaste = false
-hastebin = true
-slexy = true
-ubuntu_pastebin = false
-ghostbin = false
-ixio = false
-justpaste = false
-controlc = true
-pastecode = true
-dpaste_org = true
-defuse = true
-codepad = true
-ideone = true
-bpaste = true
-termbin = false
-sprunge = false
-paste_rs = false
-paste2 = true
-pastebin_pl = true
-quickpaste = true
+# Primary reliable sources
+pastebin = true       # Most active, high-value content
+gists = true          # GitHub gists - often has config files, keys
+paste_ee = true       # Good mix of content
+rentry = true         # Markdown pastes, often logs/configs
+dpaste = true         # Developer-focused
+hastebin = true       # Developer pastes
+slexy = true          # General purpose
+ubuntu_pastebin = true # Linux configs, logs
+ghostbin = false      # Often down
+ixio = true           # Unix-style pastes  
+justpaste = true      # General purpose, combo lists
+controlc = true       # General purpose
+pastecode = true      # Code-focused
+dpaste_org = true     # Python-focused
+defuse = true         # Security-related
+codepad = false       # Mostly trivial code exercises
+ideone = false        # DISABLED - floods with student homework
+bpaste = true         # General paste
+termbin = true        # CLI pastes, often configs
+sprunge = true        # CLI pastes
+paste_rs = true       # Rust community
+paste2 = true         # General purpose
+pastebin_pl = true    # Polish pastebin
+quickpaste = true     # Quick pastes
 
 # Note: external_url scraper is always enabled
 # Submit paste URLs via POST /api/submit-url

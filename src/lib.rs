@@ -6,6 +6,8 @@ pub mod hash;
 pub mod lang_detect;
 pub mod models;
 pub mod patterns;
+pub mod proxy;
+pub mod quality;
 pub mod rate_limiter;
 pub mod scheduler;
 pub mod scrapers;

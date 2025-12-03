@@ -1,4 +1,4 @@
-use crate::models::{Paste, SearchFilters};
+use crate::models::{Comment, Paste, SearchFilters};
 use rusqlite::{params, Connection, Result as SqlResult, Row};
 use std::path::Path;
 use thiserror::Error;
@@ -114,7 +114,19 @@ CREATE TABLE IF NOT EXISTS metadata (
     value TEXT NOT NULL
 );
 
-INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', '001');
+-- Comments table (anonymous)
+CREATE TABLE IF NOT EXISTS comments (
+    id TEXT PRIMARY KEY,
+    paste_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (paste_id) REFERENCES pastes(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_paste_id ON comments(paste_id);
+CREATE INDEX IF NOT EXISTS idx_comments_created_at ON comments(created_at DESC);
+
+INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', '002');
 INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 "#,
         )?;
@@ -284,6 +296,47 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
             .conn
             .execute("DELETE FROM pastes WHERE expires_at < unixepoch()", [])?;
         Ok(changes)
+    }
+
+    /// Insert a comment
+    pub fn insert_comment(&mut self, comment: &Comment) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO comments (id, paste_id, content, created_at) VALUES (?, ?, ?, ?)",
+            params![comment.id, comment.paste_id, comment.content, comment.created_at],
+        )?;
+        Ok(())
+    }
+
+    /// Get comments for a paste
+    pub fn get_comments(&self, paste_id: &str) -> Result<Vec<Comment>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, paste_id, content, created_at FROM comments WHERE paste_id = ? ORDER BY created_at ASC",
+        )?;
+        let comments = stmt
+            .query_map(params![paste_id], |row| {
+                Ok(Comment {
+                    id: row.get(0)?,
+                    paste_id: row.get(1)?,
+                    content: row.get(2)?,
+                    created_at: row.get(3)?,
+                })
+            })?
+            .collect::<SqlResult<Vec<_>>>()?;
+        Ok(comments)
+    }
+
+    /// Get comment count for a paste
+    pub fn get_comment_count(&self, paste_id: &str) -> Result<i64> {
+        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM comments WHERE paste_id = ?")?;
+        let count = stmt.query_row(params![paste_id], |row| row.get(0))?;
+        Ok(count)
+    }
+
+    /// Check if content hash exists (for deduplication)
+    pub fn hash_exists(&self, hash: &str) -> Result<bool> {
+        let mut stmt = self.conn.prepare("SELECT 1 FROM pastes WHERE content_hash = ? LIMIT 1")?;
+        let exists = stmt.exists(params![hash])?;
+        Ok(exists)
     }
 
     /// Helper function to convert a database row to a Paste struct

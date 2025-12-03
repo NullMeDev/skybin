@@ -59,49 +59,80 @@ impl Scraper for IdeoneScraper {
     }
 }
 
-/// Filter out trivial student code snippets
+/// Filter out trivial student code snippets - very aggressive
 fn is_trivial_code(content: &str) -> bool {
     let content_lower = content.to_lowercase();
     let line_count = content.lines().count();
+    let content_len = content.len();
     
-    // Too short to be interesting
-    if line_count < 5 {
+    // Too short to be interesting (require substantial content)
+    if line_count < 15 || content_len < 500 {
         return true;
     }
     
-    // Classic Hello World indicators
+    // If it starts with #include and is short, skip it - this is student code
+    let first_line = content.lines().next().unwrap_or("").trim().to_lowercase();
+    if first_line.starts_with("#include") && line_count < 50 {
+        // Allow only if it contains sensitive patterns
+        if !has_sensitive_content(&content_lower) {
+            return true;
+        }
+    }
+    
+    // Competitive programming headers = immediate skip
+    if content_lower.contains("bits/stdc++.h") {
+        return true;
+    }
+    
+    // Common competitive programming patterns
+    let competitive_patterns = [
+        "#define ll long",
+        "#define int long",
+        "using namespace std",
+        "void solve(",
+        "int t; cin >> t",
+        "while(t--)",
+        "ios_base::sync",
+        "cin.tie",
+        "cout.tie",
+        "freopen(",
+        "vector<int>",
+        "vector<ll>",
+        "pair<int",
+        "#define pb push_back",
+        "#define mp make_pair",
+        "#define all(",
+        "#define rep(",
+        "#define for(",
+        "mod = 1e9",
+        "1000000007",
+        "998244353",
+    ];
+    
+    let mut competitive_matches = 0;
+    for pattern in &competitive_patterns {
+        if content_lower.contains(pattern) {
+            competitive_matches += 1;
+        }
+    }
+    // If more than 2 competitive programming patterns, skip
+    if competitive_matches >= 2 {
+        return true;
+    }
+    
+    // Classic trivial patterns
     let trivial_patterns = [
-        "hello world",
-        "hello, world",
-        "helloworld",
-        "print(\"hello",
-        "printf(\"hello",
-        "cout << \"hello",
-        "system.out.println(\"hello",
-        "console.log(\"hello",
-        "echo \"hello",
-        "puts \"hello",
-        // Common student exercises
-        "fibonacci",
-        "factorial",
-        "prime number",
-        "bubble sort",
-        "binary search",
-        "linked list",
-        "calculator",
-        "sum of",
-        "average of",
-        "armstrong",
-        "palindrome",
-        "reverse string",
-        "swap two",
-        // Test/placeholder code
-        "lorem ipsum",
-        "test123",
-        "asdf",
-        "qwerty",
-        "// todo",
-        "# todo",
+        "hello world", "hello, world", "helloworld",
+        "print(\"hello", "printf(\"hello", "cout << \"hello",
+        "system.out.println(\"hello", "console.log(\"hello",
+        "fibonacci", "factorial", "prime number", "bubble sort",
+        "binary search", "linked list", "calculator",
+        "armstrong", "palindrome", "reverse string", "swap two",
+        "lorem ipsum", "test123", "asdf", "qwerty",
+        "// practice", "// exercise", "// homework", "// assignment",
+        "/* practice", "/* exercise", "/* homework",
+        "gcd(", "lcm(", "power(", "modpow(",
+        "sieve", "dfs(", "bfs(",
     ];
     
     for pattern in trivial_patterns {
@@ -110,18 +141,48 @@ fn is_trivial_code(content: &str) -> bool {
         }
     }
     
-    // If it's just a basic #include with main() and nothing interesting
-    if content_lower.contains("#include") && 
-       content_lower.contains("int main") &&
-       line_count < 20 &&
-       !content_lower.contains("@") &&  // No emails
-       !content_lower.contains("password") &&
-       !content_lower.contains("api") &&
-       !content_lower.contains("token") &&
-       !content_lower.contains("secret") &&
-       !content_lower.contains("key") {
+    // If it's pure code without any interesting content
+    if content_lower.contains("#include") && content_lower.contains("int main") {
+        if !has_sensitive_content(&content_lower) {
+            return true;
+        }
+    }
+    
+    // Python/Java student code
+    if (content_lower.contains("def main") || content_lower.contains("public static void main"))
+       && line_count < 40 && !has_sensitive_content(&content_lower) {
         return true;
     }
     
+    false
+}
+
+/// Check if content has sensitive/interesting patterns
+fn has_sensitive_content(content: &str) -> bool {
+    let sensitive_patterns = [
+        "password", "passwd", "pwd",
+        "api_key", "apikey", "api-key",
+        "token", "bearer", "auth",
+        "secret", "credential",
+        "private_key", "privatekey",
+        "aws_", "azure", "gcp",
+        "mysql://", "postgres://", "mongodb://", "redis://",
+        "smtp", "ftp://", "ssh://",
+        "@gmail", "@yahoo", "@outlook", "@hotmail",
+        "credit", "card", "cvv",
+        "bitcoin", "ethereum", "wallet",
+        "discord", "telegram", "slack",
+        "netflix", "spotify", "disney", "hulu",
+        "admin", "root", "sudo",
+        "hack", "exploit", "vuln",
+        "leak", "dump", "breach",
+        ".env", "config", "settings",
+    ];
+    
+    for pattern in sensitive_patterns {
+        if content.contains(pattern) {
+            return true;
+        }
+    }
     false
 }

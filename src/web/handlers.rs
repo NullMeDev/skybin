@@ -7,7 +7,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use super::{ApiError, ApiResponse, AppState};
-use crate::models::{PatternMatch, SearchFilters};
+use crate::models::{Comment, PatternMatch, SearchFilters};
 
 #[derive(Debug, Serialize)]
 pub struct PasteListItem {
@@ -365,6 +365,164 @@ pub struct SubmitUrlRequest {
 pub struct SubmitUrlResponse {
     pub queued: usize,
     pub message: String,
+}
+
+// --- COMMENT ENDPOINTS ---
+
+#[derive(Debug, Deserialize)]
+pub struct AddCommentRequest {
+    pub content: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CommentResponse {
+    pub id: String,
+    pub content: String,
+    pub created_at: i64,
+}
+
+/// POST /api/paste/:id/comments - Add anonymous comment
+pub async fn add_comment(
+    State(state): State<AppState>,
+    Path(paste_id): Path<String>,
+    Json(payload): Json<AddCommentRequest>,
+) -> Result<(StatusCode, Json<ApiResponse<CommentResponse>>), ApiError> {
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    // Validate content
+    let content = payload.content.trim();
+    if content.is_empty() {
+        return Err(ApiError("Comment cannot be empty".to_string()));
+    }
+    if content.len() > 2000 {
+        return Err(ApiError("Comment too long (max 2000 characters)".to_string()));
+    }
+
+    let mut db = state
+        .db
+        .lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+
+    // Verify paste exists
+    if db.get_paste(&paste_id).map_err(|e| ApiError(format!("Database error: {}", e)))?.is_none() {
+        return Err(ApiError("Paste not found".to_string()));
+    }
+
+    let comment = Comment {
+        id: Uuid::new_v4().to_string(),
+        paste_id: paste_id.clone(),
+        content: html_escape::encode_text(content).to_string(),
+        created_at: Utc::now().timestamp(),
+    };
+
+    db.insert_comment(&comment)
+        .map_err(|e| ApiError(format!("Failed to save comment: {}", e)))?;
+
+    let response = CommentResponse {
+        id: comment.id,
+        content: comment.content,
+        created_at: comment.created_at,
+    };
+
+    Ok((StatusCode::CREATED, Json(ApiResponse::ok(response))))
+}
+
+/// GET /api/paste/:id/comments - Get comments for paste
+pub async fn get_comments(
+    State(state): State<AppState>,
+    Path(paste_id): Path<String>,
+) -> Result<Json<ApiResponse<Vec<CommentResponse>>>, ApiError> {
+    let db = state
+        .db
+        .lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+
+    let comments = db
+        .get_comments(&paste_id)
+        .map_err(|e| ApiError(format!("Failed to get comments: {}", e)))?;
+
+    let responses: Vec<CommentResponse> = comments
+        .into_iter()
+        .map(|c| CommentResponse {
+            id: c.id,
+            content: c.content,
+            created_at: c.created_at,
+        })
+        .collect();
+
+    Ok(Json(ApiResponse::ok(responses)))
+}
+
+// --- EXPORT ENDPOINTS ---
+
+/// GET /api/export/:id/json - Export paste as JSON
+pub async fn export_json(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let db = state
+        .db
+        .lock()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let paste = db
+        .get_paste(&id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let json = serde_json::json!({
+        "id": paste.id,
+        "title": paste.title,
+        "source": paste.source,
+        "syntax": paste.syntax,
+        "content": paste.content,
+        "created_at": paste.created_at,
+        "is_sensitive": paste.is_sensitive,
+        "matched_patterns": paste.matched_patterns,
+    });
+
+    let filename = format!("attachment; filename=\"paste-{}.json\"", id);
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/json".to_string()),
+            (header::CONTENT_DISPOSITION, filename),
+        ],
+        serde_json::to_string_pretty(&json).unwrap_or_default(),
+    ))
+}
+
+/// GET /api/export/:id/csv - Export paste as CSV
+pub async fn export_csv(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let db = state
+        .db
+        .lock()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let paste = db
+        .get_paste(&id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // CSV format: line_number,content
+    let mut csv = String::from("line_number,content\n");
+    for (i, line) in paste.content.lines().enumerate() {
+        // Escape quotes and wrap in quotes
+        let escaped = line.replace('"', "\"\"");
+        csv.push_str(&format!("{},\"{}\"\n", i + 1, escaped));
+    }
+
+    let filename = format!("attachment; filename=\"paste-{}.csv\"", id);
+    Ok((
+        [
+            (header::CONTENT_TYPE, "text/csv".to_string()),
+            (header::CONTENT_DISPOSITION, filename),
+        ],
+        csv,
+    ))
 }
 
 /// POST /api/submit-url - Submit paste URLs for monitoring

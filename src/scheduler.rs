@@ -38,6 +38,12 @@ impl Scheduler {
         &mut self,
         discovered: crate::models::DiscoveredPaste,
     ) -> anyhow::Result<()> {
+        // GLOBAL QUALITY FILTER - reject low-quality content from ALL sources
+        if !Self::passes_quality_check(&discovered.content) {
+            tracing::debug!("Rejected low-quality paste from {}", discovered.source);
+            return Ok(());
+        }
+
         // Anonymize the paste before storing (strip authors, URLs, etc)
         let anonymization_config = crate::anonymization::AnonymizationConfig::default();
         let discovered =
@@ -86,6 +92,103 @@ impl Scheduler {
 
         self.db.insert_paste(&paste)?;
         Ok(())
+    }
+
+    /// Global quality check for all pastes - filters out junk content
+    fn passes_quality_check(content: &str) -> bool {
+        let content_lower = content.to_lowercase();
+        let line_count = content.lines().count();
+        let content_len = content.len();
+        
+        // Minimum requirements
+        if content_len < 100 || line_count < 3 {
+            return false;
+        }
+        
+        // Immediately pass if it has sensitive content
+        if Self::has_interesting_content(&content_lower) {
+            return true;
+        }
+        
+        // Filter out pure code without sensitive content
+        let code_indicators = [
+            "#include", "using namespace", "int main",
+            "public class", "public static void main",
+            "def ", "import ", "from ", "class ",
+            "function ", "const ", "let ", "var ",
+            "package main", "func main",
+        ];
+        
+        let is_code = code_indicators.iter().any(|i| content_lower.contains(i));
+        
+        // If it's code, require it to be substantial or have interesting content
+        if is_code {
+            // Require more lines for code
+            if line_count < 30 {
+                return false;
+            }
+        }
+        
+        // Skip content that's mostly single-character lines or gibberish
+        let avg_line_len = content_len / line_count.max(1);
+        if avg_line_len < 10 {
+            return false;
+        }
+        
+        true
+    }
+    
+    /// Check if content contains interesting/sensitive patterns
+    fn has_interesting_content(content: &str) -> bool {
+        let interesting_patterns = [
+            // Credentials
+            "password", "passwd", "pwd=", ":pass",
+            "api_key", "apikey", "api-key", "api_secret",
+            "token", "bearer", "auth", "oauth",
+            "secret", "credential", "private",
+            // Database
+            "mysql://", "postgres://", "mongodb://", "redis://",
+            "database", "db_host", "db_user", "db_pass",
+            // Cloud
+            "aws_", "azure", "gcp_", "digitalocean",
+            "s3://", "bucket",
+            // Email combos
+            "@gmail", "@yahoo", "@outlook", "@hotmail", "@proton",
+            ":password", ":pass", ":123",
+            // Payment
+            "stripe", "paypal", "credit", "card",
+            "bitcoin", "ethereum", "wallet", "crypto",
+            // Services
+            "netflix", "spotify", "disney", "hulu", "hbo",
+            "steam", "epic", "playstation", "xbox",
+            "discord", "telegram", "slack", "twitch",
+            // Infrastructure
+            "ssh", "ftp", "smtp", "vpn", "proxy",
+            "server", "admin", "root",
+            // Security
+            "hack", "exploit", "vuln", "breach", "leak", "dump",
+            "phish", "malware", "backdoor",
+            // Config
+            ".env", "config", "settings", "credentials",
+            "-----begin", "-----end",
+        ];
+        
+        for pattern in interesting_patterns {
+            if content.contains(pattern) {
+                return true;
+            }
+        }
+        
+        // Check for email:password combo format
+        let lines: Vec<&str> = content.lines().take(20).collect();
+        let combo_count = lines.iter()
+            .filter(|l| l.contains('@') && l.contains(':') && l.len() > 10 && l.len() < 200)
+            .count();
+        if combo_count >= 3 {
+            return true;
+        }
+        
+        false
     }
 }
 
