@@ -64,6 +64,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/", get(handlers::serve_index))
         .route("/search", get(handlers::serve_search))
         .route("/upload", get(handlers::serve_upload))
+        .route("/changelog", get(handlers::serve_changelog))
         .route("/paste/:id", get(handlers::serve_paste))
         .route("/raw/:id", get(handlers::raw_paste))
         // Static assets

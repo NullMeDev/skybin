@@ -60,6 +60,7 @@ const INDEX_HTML: &str = include_str!("../../static/index.html");
 const SEARCH_HTML: &str = include_str!("../../static/search.html");
 const UPLOAD_HTML: &str = include_str!("../../static/upload.html");
 const PASTE_HTML: &str = include_str!("../../static/paste.html");
+const CHANGELOG_HTML: &str = include_str!("../../static/changelog.html");
 
 /// GET / - Dashboard HTML page
 pub async fn serve_index() -> impl IntoResponse {
@@ -79,6 +80,11 @@ pub async fn serve_upload() -> impl IntoResponse {
 /// GET /paste/:id - Paste detail HTML page
 pub async fn serve_paste() -> impl IntoResponse {
     Html(PASTE_HTML)
+}
+
+/// GET /changelog - Changelog HTML page
+pub async fn serve_changelog() -> impl IntoResponse {
+    Html(CHANGELOG_HTML)
 }
 
 /// GET /api/pastes - Recent pastes feed (JSON API)

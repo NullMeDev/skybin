@@ -70,25 +70,136 @@ fn detect_code_type(content: &str) -> Option<String> {
 }
 
 fn detect_data_type(content: &str) -> Option<String> {
+    let content_lower = content.to_lowercase();
+    
+    // Streaming service logins (check first as most specific)
+    let streaming_patterns = [
+        (&["disney", "disneyplus", "disney+"][..], "Disney+ Login"),
+        (&["netflix"][..], "Netflix Login"),
+        (&["hulu"][..], "Hulu Login"),
+        (&["hbomax", "hbo max", "hbo"][..], "HBO Max Login"),
+        (&["paramount", "paramount+"][..], "Paramount+ Login"),
+        (&["peacock"][..], "Peacock Login"),
+        (&["crunchyroll"][..], "Crunchyroll Login"),
+        (&["funimation"][..], "Funimation Login"),
+        (&["spotify"][..], "Spotify Login"),
+        (&["apple music", "applemusic"][..], "Apple Music Login"),
+        (&["amazon prime", "primevideo", "prime video"][..], "Amazon Prime Login"),
+        (&["twitch"][..], "Twitch Login"),
+        (&["youtube premium", "ytpremium"][..], "YouTube Premium Login"),
+        (&["dazn"][..], "DAZN Login"),
+        (&["espn", "espn+"][..], "ESPN+ Login"),
+        (&["showtime"][..], "Showtime Login"),
+        (&["starz"][..], "Starz Login"),
+        (&["tidal"][..], "Tidal Login"),
+        (&["deezer"][..], "Deezer Login"),
+        (&["nordvpn"][..], "NordVPN Login"),
+        (&["expressvpn"][..], "ExpressVPN Login"),
+        (&["surfshark"][..], "Surfshark Login"),
+        (&["ipvanish"][..], "IPVanish Login"),
+        (&["pornhub", "brazzers", "onlyfans"][..], "Adult Site Login"),
+        (&["minecraft"][..], "Minecraft Login"),
+        (&["steam", "steamcommunity"][..], "Steam Login"),
+        (&["origin", "ea.com"][..], "EA/Origin Login"),
+        (&["epic games", "epicgames"][..], "Epic Games Login"),
+        (&["playstation", "psn"][..], "PlayStation Login"),
+        (&["xbox", "xbox live"][..], "Xbox Live Login"),
+        (&["roblox"][..], "Roblox Login"),
+        (&["fortnite"][..], "Fortnite Login"),
+    ];
+
+    // Check if content has email:password pattern AND a service keyword
+    let has_login_pattern = content_lower.contains(':') && 
+        (content_lower.contains('@') || content_lower.contains("pass") || content_lower.contains("user"));
+    
+    if has_login_pattern {
+        for (keywords, title) in streaming_patterns {
+            for keyword in keywords {
+                if content_lower.contains(keyword) {
+                    return Some(title.to_string());
+                }
+            }
+        }
+    }
+
+    // General patterns
     let patterns = [
+        // Combo lists
+        (r"(?i)([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\s*[:|]\s*\S+", "Email:Password Combo List"),
+        (r"(?i)(user|username)\s*[:|]\s*\S+.*(pass|password)\s*[:|]\s*\S+", "Username:Password List"),
+        
+        // API and tokens
         (r"(?i)api[_-]?key\s*[:=]", "API Key Leak"),
-        (r"(?i)password\s*[:=]", "Password Data"),
         (r"(?i)secret[_-]?key\s*[:=]", "Secret Key Data"),
         (r"AKIA[0-9A-Z]{16}", "AWS Credentials"),
-        (r"-----BEGIN\s+(RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY-----", "Private Key"),
-        (r"-----BEGIN\s+CERTIFICATE-----", "SSL Certificate"),
         (r"ghp_[a-zA-Z0-9]{36}", "GitHub Token"),
         (r"xox[baprs]-[0-9a-zA-Z-]+", "Slack Token"),
-        (r"(?i)mysql://|postgres://|mongodb://", "Database Connection String"),
-        (r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b.*\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "IP Address List"),
-        (r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}.*){3,}", "Email List"),
-        (r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\s*:\s*\S+", "Email:Password Combo List"),
+        (r"(?i)discord.*token|token.*discord", "Discord Token"),
+        (r"[MN][A-Za-z\d]{23,}\.[\w-]{6}\.[\w-]{27}", "Discord Token"),
+        (r"(?i)telegram.*bot|bot.*token", "Telegram Bot Token"),
+        
+        // Keys and certs
+        (r"-----BEGIN\s+(RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY-----", "Private Key"),
+        (r"-----BEGIN\s+CERTIFICATE-----", "SSL Certificate"),
+        
+        // Database
+        (r"(?i)mysql://|postgres://|mongodb://|redis://", "Database Connection String"),
+        
+        // Financial
         (r"\b4[0-9]{12}(?:[0-9]{3})?\b", "Credit Card Numbers"),
+        (r"(?i)cvv|credit.?card|debit.?card", "Payment Card Data"),
+        (r"(?i)paypal.*login|paypal.*pass", "PayPal Login"),
+        (r"(?i)bank.*login|bank.*pass", "Banking Credentials"),
+        
+        // Social media
+        (r"(?i)instagram.*pass|insta.*login", "Instagram Login"),
+        (r"(?i)facebook.*pass|fb.*login", "Facebook Login"),
+        (r"(?i)twitter.*pass|twitter.*login", "Twitter Login"),
+        (r"(?i)tiktok.*pass|tiktok.*login", "TikTok Login"),
+        (r"(?i)snapchat.*pass|snap.*login", "Snapchat Login"),
+        
+        // Email providers
+        (r"(?i)gmail.*pass|google.*login", "Gmail/Google Login"),
+        (r"(?i)outlook.*pass|hotmail.*pass|microsoft.*login", "Microsoft/Outlook Login"),
+        (r"(?i)yahoo.*pass|yahoo.*login", "Yahoo Login"),
+        (r"(?i)protonmail|proton.*mail", "ProtonMail Login"),
+        
+        // Cloud services
+        (r"(?i)aws.*key|amazon.*secret", "AWS Credentials"),
+        (r"(?i)azure.*key|azure.*secret", "Azure Credentials"),
+        (r"(?i)gcp.*key|google.*cloud", "Google Cloud Credentials"),
+        (r"(?i)digitalocean.*token", "DigitalOcean Token"),
+        (r"(?i)heroku.*api", "Heroku API Key"),
+        
+        // Hosting/domains
+        (r"(?i)cpanel.*pass|cpanel.*login", "cPanel Login"),
+        (r"(?i)plesk.*pass|plesk.*login", "Plesk Login"),
+        (r"(?i)godaddy.*login|namecheap.*login", "Domain Registrar Login"),
+        (r"(?i)cloudflare.*key|cloudflare.*token", "Cloudflare Credentials"),
+        
+        // General auth
         (r"(?i)bearer\s+[a-zA-Z0-9._-]+", "Bearer Token"),
         (r"(?i)authorization:\s*", "Authorization Header"),
+        (r"(?i)oauth.*token|access_token", "OAuth Token"),
+        (r"(?i)jwt.*token|eyJ[A-Za-z0-9_-]+\.", "JWT Token"),
+        
+        // IP/Network
+        (r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b.*\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "IP Address List"),
+        (r"(?i)ssh.*pass|ssh.*key|id_rsa", "SSH Credentials"),
+        (r"(?i)ftp.*pass|ftp.*login", "FTP Credentials"),
+        (r"(?i)rdp.*pass|remote.*desktop", "RDP Credentials"),
+        
+        // Logs
         (r"(?i)(error|exception|traceback|stack\s*trace)", "Error Log"),
         (r"(?i)access[_-]?log|error[_-]?log", "Server Log"),
         (r"\[\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2}", "Apache/Nginx Log"),
+        
+        // Config files
+        (r"(?i)config.*password|password.*config", "Config File with Passwords"),
+        (r"(?i)\.env|environment.*variable", "Environment Variables"),
+        
+        // General email lists
+        (r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}.*){5,}", "Email List"),
     ];
 
     for (pattern, name) in patterns {

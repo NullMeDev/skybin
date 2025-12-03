@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Changelog - SkyBin</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .changelog-entry {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .changelog-entry h3 {
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .changelog-entry .version {
+            background: var(--primary-color);
+            color: #000;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .changelog-entry .date {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        .changelog-entry ul {
+            margin: 1rem 0 0 1.5rem;
+            color: var(--text-secondary);
+        }
+        .changelog-entry li {
+            margin-bottom: 0.5rem;
+        }
+        .changelog-entry .tag {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-right: 0.5rem;
+        }
+        .tag-feature { background: #10b981; color: #000; }
+        .tag-fix { background: #f59e0b; color: #000; }
+        .tag-security { background: #ef4444; color: #fff; }
+        .tag-perf { background: #8b5cf6; color: #fff; }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <a href="/" class="logo">SkyBin <span>v1.0.0</span></a>
+            <ul class="nav-links">
+                <li><a href="/">Feed</a></li>
+                <li><a href="/search">Search</a></li>
+                <li><a href="/upload">Upload</a></li>
+                <li><a href="/changelog" class="active">Changelog</a></li>
+                <li><a href="https://github.com/NullMeDev/skybin" target="_blank">GitHub</a></li>
+            </ul>
+            <a href="/upload" class="btn btn-primary btn-sm">New Paste</a>
+        </div>
+    </nav>
+
+    <main class="page">
+        <div class="container">
+            <div class="page-header">
+                <h1>Changelog</h1>
+                <p>Release history and updates for SkyBin</p>
+            </div>
+
+            <div class="changelog-entry">
+                <h3>
+                    <span class="version">v1.0.0</span>
+                    Major Release
+                </h3>
+                <div class="date">December 3, 2025</div>
+                <ul>
+                    <li><span class="tag tag-feature">Feature</span> Added 9 new paste scrapers: Ideone, Bpa.st, Pastecode, dpaste.org, Defuse, Codepad, Termbin, Sprunge, paste.rs</li>
+                    <li><span class="tag tag-feature">Feature</span> Added 30+ new detection patterns for streaming credentials, OAuth tokens, Discord/Telegram tokens</li>
+                    <li><span class="tag tag-feature">Feature</span> Smart auto-titling system that identifies Disney+, Netflix, Spotify, and other streaming service logins</li>
+                    <li><span class="tag tag-feature">Feature</span> Added changelog page to website</li>
+                    <li><span class="tag tag-security">Security</span> Service now binds to localhost only - nginx handles external traffic</li>
+                    <li><span class="tag tag-security">Security</span> Systemd service hardened with security restrictions</li>
+                    <li><span class="tag tag-security">Security</span> Added security headers to nginx (X-Frame-Options, X-Content-Type-Options, etc.)</li>
+                    <li><span class="tag tag-security">Security</span> File permissions locked down (600 for config/db, 700 for directory)</li>
+                    <li><span class="tag tag-security">Security</span> Fail2ban jails added for nginx rate limiting and bot detection</li>
+                    <li><span class="tag tag-perf">Performance</span> Increased concurrent scrapers to 16</li>
+                    <li><span class="tag tag-perf">Performance</span> Reduced scrape interval to 45 seconds</li>
+                    <li><span class="tag tag-fix">Cleanup</span> Removed AI-generated documentation files</li>
+                    <li><span class="tag tag-fix">Cleanup</span> Professional README rewrite</li>
+                </ul>
+            </div>
+
+            <div class="changelog-entry">
+                <h3>
+                    <span class="version">v0.3.0</span>
+                    Pattern Detection Update
+                </h3>
+                <div class="date">November 28, 2025</div>
+                <ul>
+                    <li><span class="tag tag-feature">Feature</span> Added external URL submission endpoint</li>
+                    <li><span class="tag tag-feature">Feature</span> Improved pattern detection for AWS keys, private keys, credit cards</li>
+                    <li><span class="tag tag-feature">Feature</span> Added database connection string detection</li>
+                    <li><span class="tag tag-feature">Feature</span> New search functionality with filters</li>
+                    <li><span class="tag tag-fix">Fix</span> Fixed pagination issues on feed page</li>
+                </ul>
+            </div>
+
+            <div class="changelog-entry">
+                <h3>
+                    <span class="version">v0.2.0</span>
+                    Multi-Source Scraping
+                </h3>
+                <div class="date">November 15, 2025</div>
+                <ul>
+                    <li><span class="tag tag-feature">Feature</span> Added GitHub Gists scraper</li>
+                    <li><span class="tag tag-feature">Feature</span> Added Hastebin, Slexy, Ghostbin scrapers</li>
+                    <li><span class="tag tag-feature">Feature</span> Rate limiting per source</li>
+                    <li><span class="tag tag-feature">Feature</span> Configurable user agents</li>
+                    <li><span class="tag tag-perf">Performance</span> Concurrent scraping implementation</li>
+                    <li><span class="tag tag-fix">Fix</span> Duplicate paste detection</li>
+                </ul>
+            </div>
+
+            <div class="changelog-entry">
+                <h3>
+                    <span class="version">v0.1.0</span>
+                    Initial Release
+                </h3>
+                <div class="date">November 7, 2025</div>
+                <ul>
+                    <li><span class="tag tag-feature">Feature</span> Pastebin scraper with archive monitoring</li>
+                    <li><span class="tag tag-feature">Feature</span> Basic pattern detection (API keys, passwords)</li>
+                    <li><span class="tag tag-feature">Feature</span> SQLite database storage</li>
+                    <li><span class="tag tag-feature">Feature</span> Web interface with paste feed</li>
+                    <li><span class="tag tag-feature">Feature</span> REST API for paste access</li>
+                    <li><span class="tag tag-feature">Feature</span> Configurable retention period</li>
+                </ul>
+            </div>
+
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div>SkyBin - Secure Paste Aggregator</div>
+                <ul class="footer-links">
+                    <li><a href="/api/health">API Status</a></li>
+                    <li><a href="https://github.com/NullMeDev/skybin">GitHub</a></li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

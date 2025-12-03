@@ -2,41 +2,31 @@
 
 Paste aggregator that monitors public paste sites for leaked credentials, API keys, and sensitive data.
 
-**Live:** https://bin.nullme.lol
+**Live:** https://skybin.lol | https://bin.nullme.lol
 
 ## Features
 
-- Scrapes multiple paste sites every 60 seconds
-- Pattern detection for credentials, API keys, tokens
+- Scrapes 18 paste sites every 45 seconds
+- 50+ detection patterns for credentials, tokens, API keys
+- Smart auto-titling (identifies Disney+, Netflix, Spotify logins, etc.)
 - Full-text search with SQLite FTS5
-- Auto-generated titles based on content analysis
 - Anonymous paste submission
 - REST API
 
 ## Detected Patterns
 
-- AWS access keys and secrets
-- GitHub/GitLab tokens
-- Slack/Discord tokens
-- Database connection strings
-- Private keys (RSA, DSA, EC)
-- Email:password combos
-- Credit card numbers
-- Bearer tokens
-- Streaming service credentials
+- **Streaming Services:** Disney+, Netflix, Hulu, HBO Max, Spotify, Crunchyroll, etc.
+- **Gaming:** Steam, Epic Games, PlayStation, Xbox, Minecraft, Fortnite
+- **Cloud:** AWS, Azure, GCP, DigitalOcean, Heroku, Cloudflare
+- **Social:** Discord, Telegram, Instagram, Facebook, Twitter, TikTok
+- **Email:** Gmail, Outlook, Yahoo, ProtonMail
+- **Financial:** Credit cards, PayPal, banking credentials
+- **Auth:** OAuth tokens, JWT, Bearer tokens, API keys
+- **Infrastructure:** SSH keys, database strings, private keys
 
-## Sources
+## Sources (18)
 
-- Pastebin
-- GitHub Gists
-- Slexy
-- ControlC
-- Pastecode
-- Dpaste.org
-- Hastebin
-- Defuse
-- Codepad
-- External URLs (manual submission)
+Pastebin, GitHub Gists, Ideone, Bpa.st, Pastecode, dpaste.org, Defuse, Codepad, Slexy, ControlC, Hastebin, Ghostbin, Ubuntu Pastebin, ix.io, JustPaste, Rentry, dpaste.com, External URLs
 
 ## API
 
@@ -48,22 +38,6 @@ GET  /api/stats           - statistics
 GET  /api/health          - health check
 POST /api/paste           - create paste
 POST /api/submit-url      - submit URL to scrape
-```
-
-## Config
-
-Edit `config.toml`:
-
-```toml
-[scraping]
-interval_seconds = 60
-concurrent_scrapers = 8
-
-[sources]
-pastebin = true
-gists = true
-slexy = true
-controlc = true
 ```
 
 ## Build
