@@ -7,9 +7,9 @@ use paste_vault::scrapers::traits::Scraper;
 use paste_vault::scrapers::{
     BpasteScraper, CodepadScraper, ControlcScraper, DPasteScraper, DefuseScraper, DpasteOrgScraper,
     ExternalUrlScraper, GhostbinScraper, GitHubGistsScraper, HastebinScraper, IdeoneScraper,
-    IxioScraper, JustPasteScraper, PasteEeScraper, PasteRsScraper, PastebinScraper,
-    PastecodeScraper, RentryScraper, SlexyScraper, SprungeScraper, TermbinScraper,
-    UbuntuPastebinScraper,
+    IxioScraper, JustPasteScraper, Paste2Scraper, PasteEeScraper, PasteRsScraper,
+    PastebinPlScraper, PastebinScraper, PastecodeScraper, QuickpasteScraper, RentryScraper,
+    SlexyScraper, SprungeScraper, TermbinScraper, UbuntuPastebinScraper,
 };
 use paste_vault::web::{create_router, AppState};
 use std::sync::{Arc, Mutex};
@@ -156,6 +156,15 @@ async fn main() -> anyhow::Result<()> {
     }
     if config.sources.paste_rs {
         spawn_scraper("paste_rs", Box::new(PasteRsScraper::new()));
+    }
+    if config.sources.paste2 {
+        spawn_scraper("paste2", Box::new(Paste2Scraper::new()));
+    }
+    if config.sources.pastebin_pl {
+        spawn_scraper("pastebin_pl", Box::new(PastebinPlScraper::new()));
+    }
+    if config.sources.quickpaste {
+        spawn_scraper("quickpaste", Box::new(QuickpasteScraper::new()));
     }
 
     // External URL scraper (always enabled for URL submissions)

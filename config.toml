@@ -9,10 +9,10 @@ retention_days = 7
 max_pastes = 10000
 
 [scraping]
-interval_seconds = 45  # 45 seconds - aggressive scraping
-concurrent_scrapers = 16
-jitter_min_ms = 100
-jitter_max_ms = 1500
+interval_seconds = 30  # 30 seconds - very aggressive scraping
+concurrent_scrapers = 24
+jitter_min_ms = 50
+jitter_max_ms = 1000
 retries = 3
 backoff_ms = 500
 proxy = ""  # Optional: "http://proxy:port"
@@ -46,6 +46,9 @@ bpaste = true
 termbin = false
 sprunge = false
 paste_rs = false
+paste2 = true
+pastebin_pl = true
+quickpaste = true
 
 # Note: external_url scraper is always enabled
 # Submit paste URLs via POST /api/submit-url

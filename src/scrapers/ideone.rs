@@ -43,7 +43,9 @@ impl Scraper for IdeoneScraper {
                     .await
                 {
                     if let Ok(content) = content_resp.text().await {
-                        if !content.is_empty() && content.len() < 100000 {
+                        // Skip trivial code snippets (Hello World, basic exercises)
+                        if !content.is_empty() && content.len() < 100000 && content.len() > 100 
+                            && !is_trivial_code(&content) {
                             pastes.push(DiscoveredPaste::new("ideone", paste_id, content)
                                 .with_url(format!("https://ideone.com/{}", paste_id)));
                         }
@@ -55,4 +57,71 @@ impl Scraper for IdeoneScraper {
         
         Ok(pastes)
     }
+}
+
+/// Filter out trivial student code snippets
+fn is_trivial_code(content: &str) -> bool {
+    let content_lower = content.to_lowercase();
+    let line_count = content.lines().count();
+    
+    // Too short to be interesting
+    if line_count < 5 {
+        return true;
+    }
+    
+    // Classic Hello World indicators
+    let trivial_patterns = [
+        "hello world",
+        "hello, world",
+        "helloworld",
+        "print(\"hello",
+        "printf(\"hello",
+        "cout << \"hello",
+        "system.out.println(\"hello",
+        "console.log(\"hello",
+        "echo \"hello",
+        "puts \"hello",
+        // Common student exercises
+        "fibonacci",
+        "factorial",
+        "prime number",
+        "bubble sort",
+        "binary search",
+        "linked list",
+        "calculator",
+        "sum of",
+        "average of",
+        "armstrong",
+        "palindrome",
+        "reverse string",
+        "swap two",
+        // Test/placeholder code
+        "lorem ipsum",
+        "test123",
+        "asdf",
+        "qwerty",
+        "// todo",
+        "# todo",
+    ];
+    
+    for pattern in trivial_patterns {
+        if content_lower.contains(pattern) {
+            return true;
+        }
+    }
+    
+    // If it's just a basic #include with main() and nothing interesting
+    if content_lower.contains("#include") && 
+       content_lower.contains("int main") &&
+       line_count < 20 &&
+       !content_lower.contains("@") &&  // No emails
+       !content_lower.contains("password") &&
+       !content_lower.contains("api") &&
+       !content_lower.contains("token") &&
+       !content_lower.contains("secret") &&
+       !content_lower.contains("key") {
+        return true;
+    }
+    
+    false
 }

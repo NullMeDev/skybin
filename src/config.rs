@@ -84,6 +84,12 @@ pub struct SourcesConfig {
     pub sprunge: bool,
     #[serde(default)]
     pub paste_rs: bool,
+    #[serde(default)]
+    pub paste2: bool,
+    #[serde(default)]
+    pub pastebin_pl: bool,
+    #[serde(default)]
+    pub quickpaste: bool,
 }
 
 impl SourcesConfig {
@@ -152,6 +158,15 @@ impl SourcesConfig {
         }
         if self.paste_rs {
             sources.push("paste_rs");
+        }
+        if self.paste2 {
+            sources.push("paste2");
+        }
+        if self.pastebin_pl {
+            sources.push("pastebin_pl");
+        }
+        if self.quickpaste {
+            sources.push("quickpaste");
         }
         sources
     }

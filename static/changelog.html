@@ -82,19 +82,13 @@
                 </h3>
                 <div class="date">December 3, 2025</div>
                 <ul>
-                    <li><span class="tag tag-feature">Feature</span> Added 9 new paste scrapers: Ideone, Bpa.st, Pastecode, dpaste.org, Defuse, Codepad, Termbin, Sprunge, paste.rs</li>
-                    <li><span class="tag tag-feature">Feature</span> Added 30+ new detection patterns for streaming credentials, OAuth tokens, Discord/Telegram tokens</li>
-                    <li><span class="tag tag-feature">Feature</span> Smart auto-titling system that identifies Disney+, Netflix, Spotify, and other streaming service logins</li>
-                    <li><span class="tag tag-feature">Feature</span> Added changelog page to website</li>
-                    <li><span class="tag tag-security">Security</span> Service now binds to localhost only - nginx handles external traffic</li>
-                    <li><span class="tag tag-security">Security</span> Systemd service hardened with security restrictions</li>
-                    <li><span class="tag tag-security">Security</span> Added security headers to nginx (X-Frame-Options, X-Content-Type-Options, etc.)</li>
-                    <li><span class="tag tag-security">Security</span> File permissions locked down (600 for config/db, 700 for directory)</li>
-                    <li><span class="tag tag-security">Security</span> Fail2ban jails added for nginx rate limiting and bot detection</li>
-                    <li><span class="tag tag-perf">Performance</span> Increased concurrent scrapers to 16</li>
-                    <li><span class="tag tag-perf">Performance</span> Reduced scrape interval to 45 seconds</li>
-                    <li><span class="tag tag-fix">Cleanup</span> Removed AI-generated documentation files</li>
-                    <li><span class="tag tag-fix">Cleanup</span> Professional README rewrite</li>
+                    <li><span class="tag tag-feature">New</span> Now scraping 18 paste sites concurrently</li>
+                    <li><span class="tag tag-feature">New</span> Smart auto-titling identifies Disney+, Netflix, Spotify, HBO Max, Steam, and 30+ services</li>
+                    <li><span class="tag tag-feature">New</span> 50+ detection patterns for credentials, API keys, tokens</li>
+                    <li><span class="tag tag-feature">New</span> Changelog page</li>
+                    <li><span class="tag tag-perf">Improved</span> Faster scraping - new content every 45 seconds</li>
+                    <li><span class="tag tag-perf">Improved</span> Quality filtering removes junk/trivial code</li>
+                    <li><span class="tag tag-fix">Fixed</span> Better paste title generation</li>
                 </ul>
             </div>
 
