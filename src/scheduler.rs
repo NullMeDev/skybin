@@ -38,11 +38,8 @@ impl Scheduler {
         &mut self,
         discovered: crate::models::DiscoveredPaste,
     ) -> anyhow::Result<()> {
-        // GLOBAL QUALITY FILTER - reject low-quality content from ALL sources
-        if !Self::passes_quality_check(&discovered.content) {
-            tracing::debug!("Rejected low-quality paste from {}", discovered.source);
-            return Ok(());
-        }
+        // Quality filters DISABLED - admin will moderate content manually
+        // All content is now accepted for review in the admin panel
 
         // Anonymize the paste before storing (strip authors, URLs, etc)
         let anonymization_config = crate::anonymization::AnonymizationConfig::default();
@@ -94,7 +91,8 @@ impl Scheduler {
         Ok(())
     }
 
-    /// Global quality check for all pastes - filters out junk content
+    /// Global quality check for all pastes - DISABLED for admin moderation
+    #[allow(dead_code)]
     fn passes_quality_check(content: &str) -> bool {
         let content_lower = content.to_lowercase();
         let line_count = content.lines().count();
@@ -139,6 +137,7 @@ impl Scheduler {
     }
     
     /// Check if content contains interesting/sensitive patterns
+    #[allow(dead_code)]
     fn has_interesting_content(content: &str) -> bool {
         let interesting_patterns = [
             // Credentials

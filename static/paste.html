@@ -16,6 +16,13 @@
         .comment-meta { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
         .comment-content { color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
         .no-comments { color: var(--text-muted); font-style: italic; }
+        .reply-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 12px; margin-top: 8px; }
+        .reply-btn:hover { color: var(--primary); }
+        .reply-form { display: none; margin-top: 8px; }
+        .reply-form.active { display: flex; gap: 8px; }
+        .reply-form textarea { flex: 1; min-height: 40px; font-size: 13px; }
+        .replies { margin-left: 24px; margin-top: 8px; border-left: 2px solid var(--border); padding-left: 12px; }
+        .reply { background: var(--bg-primary); padding: 8px; border-radius: 4px; margin-bottom: 8px; }
     </style>
 </head>
 <body>
@@ -217,16 +224,71 @@
                     if (data.data.length === 0) {
                         container.innerHTML = '<div class="no-comments">No comments yet. Be the first to comment!</div>';
                     } else {
-                        container.innerHTML = data.data.map(c => `
-                            <div class="comment">
-                                <div class="comment-meta">Anonymous • ${formatDate(c.created_at)}</div>
-                                <div class="comment-content">${escapeHtml(c.content)}</div>
-                            </div>
-                        `).join('');
+                        // Separate top-level comments and replies
+                        const topLevel = data.data.filter(c => !c.parent_id);
+                        const replies = data.data.filter(c => c.parent_id);
+                        
+                        container.innerHTML = topLevel.map(c => {
+                            const commentReplies = replies.filter(r => r.parent_id === c.id);
+                            const repliesHtml = commentReplies.length > 0 ? `
+                                <div class="replies">
+                                    ${commentReplies.map(r => `
+                                        <div class="reply">
+                                            <div class="comment-meta">Anonymous • ${formatDate(r.created_at)}</div>
+                                            <div class="comment-content">${escapeHtml(r.content)}</div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : '';
+                            return `
+                                <div class="comment" data-id="${c.id}">
+                                    <div class="comment-meta">Anonymous • ${formatDate(c.created_at)}</div>
+                                    <div class="comment-content">${escapeHtml(c.content)}</div>
+                                    <button class="reply-btn" onclick="toggleReply('${c.id}')">↩ Reply</button>
+                                    <div class="reply-form" id="reply-form-${c.id}">
+                                        <textarea id="reply-input-${c.id}" placeholder="Write a reply..." maxlength="2000"></textarea>
+                                        <button class="btn btn-primary btn-sm" onclick="submitReply('${c.id}')">Reply</button>
+                                    </div>
+                                    ${repliesHtml}
+                                </div>
+                            `;
+                        }).join('');
                     }
                 }
             } catch (e) {
                 container.innerHTML = '<div class="no-comments">Failed to load comments</div>';
+            }
+        }
+
+        function toggleReply(commentId) {
+            const form = document.getElementById(`reply-form-${commentId}`);
+            form.classList.toggle('active');
+        }
+
+        async function submitReply(parentId) {
+            const input = document.getElementById(`reply-input-${parentId}`);
+            const content = input.value.trim();
+            if (!content) {
+                showToast('Reply cannot be empty', 'error');
+                return;
+            }
+            const pasteId = getPasteId();
+            try {
+                const res = await fetch(`/api/paste/${pasteId}/comments`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, parent_id: parentId })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    input.value = '';
+                    showToast('Reply posted!');
+                    loadComments(pasteId);
+                } else {
+                    showToast(data.error || 'Failed to post reply', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to post reply', 'error');
             }
         }
 

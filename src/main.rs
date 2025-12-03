@@ -1,3 +1,4 @@
+use paste_vault::admin::AdminAuth;
 use paste_vault::config::Config;
 use paste_vault::db::Database;
 use paste_vault::patterns::PatternDetector;
@@ -173,10 +174,20 @@ async fn main() -> anyhow::Result<()> {
 
     println!("✓ Scraper tasks spawned (enabled sources + external_url)");
 
+    // Initialize admin auth if password configured
+    let admin = if !config.admin.password.is_empty() && !config.admin.password.starts_with("{{") {
+        println!("✓ Admin panel enabled at /x");
+        Some(Arc::new(AdminAuth::new(&config.admin.password)))
+    } else {
+        println!("⚠️  Admin panel disabled (no password configured)");
+        None
+    };
+
     // Create web server state
     let app_state = AppState {
         db: db.clone(),
         url_scraper: Some(external_scraper),
+        admin,
     };
     println!("✓ Web server state created");
 

@@ -2,7 +2,7 @@ use axum::{
     extract::{DefaultBodyLimit, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -17,6 +17,7 @@ pub mod handlers;
 pub struct AppState {
     pub db: Arc<Mutex<crate::db::Database>>,
     pub url_scraper: Option<Arc<crate::scrapers::ExternalUrlScraper>>,
+    pub admin: Option<Arc<crate::admin::AdminAuth>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -84,6 +85,16 @@ pub fn create_router(state: AppState) -> Router {
         // Export
         .route("/api/export/:id/json", get(handlers::export_json))
         .route("/api/export/:id/csv", get(handlers::export_csv))
+        // Admin API (hidden, token-protected)
+        .route("/api/x/login", post(handlers::admin_login))
+        .route("/api/x/logout", post(handlers::admin_logout))
+        .route("/api/x/stats", get(handlers::admin_stats))
+        .route("/api/x/pastes", get(handlers::admin_list_pastes))
+        .route("/api/x/paste/:id", delete(handlers::admin_delete_paste))
+        .route("/api/x/comment/:id", delete(handlers::admin_delete_comment))
+        .route("/api/x/source/:name", delete(handlers::admin_purge_source))
+        // Admin panel page (hidden)
+        .route("/x", get(handlers::serve_admin))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB limit
         .layer(CompressionLayer::new())
         .with_state(state)

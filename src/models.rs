@@ -108,11 +108,12 @@ pub struct SourceStat {
     pub count: i64,
 }
 
-/// Anonymous comment on a paste
+/// Anonymous comment on a paste (supports replies)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Comment {
     pub id: String,
     pub paste_id: String,
+    pub parent_id: Option<String>,  // For replies - None means top-level comment
     pub content: String,
     pub created_at: i64,
 }

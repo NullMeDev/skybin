@@ -61,6 +61,7 @@ const SEARCH_HTML: &str = include_str!("../../static/search.html");
 const UPLOAD_HTML: &str = include_str!("../../static/upload.html");
 const PASTE_HTML: &str = include_str!("../../static/paste.html");
 const CHANGELOG_HTML: &str = include_str!("../../static/changelog.html");
+const ADMIN_HTML: &str = include_str!("../../static/admin.html");
 
 /// GET / - Dashboard HTML page
 pub async fn serve_index() -> impl IntoResponse {
@@ -85,6 +86,11 @@ pub async fn serve_paste() -> impl IntoResponse {
 /// GET /changelog - Changelog HTML page
 pub async fn serve_changelog() -> impl IntoResponse {
     Html(CHANGELOG_HTML)
+}
+
+/// GET /x - Admin panel (hidden)
+pub async fn serve_admin() -> impl IntoResponse {
+    Html(ADMIN_HTML)
 }
 
 /// GET /api/pastes - Recent pastes feed (JSON API)
@@ -372,16 +378,19 @@ pub struct SubmitUrlResponse {
 #[derive(Debug, Deserialize)]
 pub struct AddCommentRequest {
     pub content: String,
+    #[serde(default)]
+    pub parent_id: Option<String>,  // For replies
 }
 
 #[derive(Debug, Serialize)]
 pub struct CommentResponse {
     pub id: String,
+    pub parent_id: Option<String>,
     pub content: String,
     pub created_at: i64,
 }
 
-/// POST /api/paste/:id/comments - Add anonymous comment
+/// POST /api/paste/:id/comments - Add anonymous comment or reply
 pub async fn add_comment(
     State(state): State<AppState>,
     Path(paste_id): Path<String>,
@@ -412,6 +421,7 @@ pub async fn add_comment(
     let comment = Comment {
         id: Uuid::new_v4().to_string(),
         paste_id: paste_id.clone(),
+        parent_id: payload.parent_id,
         content: html_escape::encode_text(content).to_string(),
         created_at: Utc::now().timestamp(),
     };
@@ -421,6 +431,7 @@ pub async fn add_comment(
 
     let response = CommentResponse {
         id: comment.id,
+        parent_id: comment.parent_id,
         content: comment.content,
         created_at: comment.created_at,
     };
@@ -428,7 +439,7 @@ pub async fn add_comment(
     Ok((StatusCode::CREATED, Json(ApiResponse::ok(response))))
 }
 
-/// GET /api/paste/:id/comments - Get comments for paste
+/// GET /api/paste/:id/comments - Get comments for paste (with replies)
 pub async fn get_comments(
     State(state): State<AppState>,
     Path(paste_id): Path<String>,
@@ -446,6 +457,7 @@ pub async fn get_comments(
         .into_iter()
         .map(|c| CommentResponse {
             id: c.id,
+            parent_id: c.parent_id,
             content: c.content,
             created_at: c.created_at,
         })
@@ -567,4 +579,189 @@ pub async fn submit_url(
     };
 
     Ok((StatusCode::ACCEPTED, Json(ApiResponse::ok(response))))
+}
+
+// =============================================================================
+// ADMIN API ENDPOINTS (Protected)
+// =============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct AdminLoginRequest {
+    pub password: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AdminLoginResponse {
+    pub token: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AdminStatsResponse {
+    pub total_pastes: i64,
+    pub total_comments: i64,
+    pub sensitive_pastes: i64,
+    pub sources_enabled: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AdminPasteItem {
+    pub id: String,
+    pub title: Option<String>,
+    pub source: String,
+    pub content_preview: String,
+    pub is_sensitive: bool,
+    pub created_at: i64,
+    pub view_count: i64,
+}
+
+/// POST /api/admin/login - Admin login
+pub async fn admin_login(
+    State(state): State<AppState>,
+    Json(payload): Json<AdminLoginRequest>,
+) -> Result<Json<ApiResponse<AdminLoginResponse>>, ApiError> {
+    let admin = state.admin.as_ref()
+        .ok_or_else(|| ApiError("Admin not configured".to_string()))?;
+    
+    match admin.login(&payload.password) {
+        Some(token) => Ok(Json(ApiResponse::ok(AdminLoginResponse { token }))),
+        None => Err(ApiError("Invalid credentials".to_string())),
+    }
+}
+
+/// POST /api/admin/logout - Admin logout
+pub async fn admin_logout(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<ApiResponse<()>>, ApiError> {
+    let admin = state.admin.as_ref()
+        .ok_or_else(|| ApiError("Admin not configured".to_string()))?;
+    
+    let token = headers.get("Authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .ok_or_else(|| ApiError("Missing token".to_string()))?;
+    
+    admin.logout(token);
+    Ok(Json(ApiResponse::ok(())))
+}
+
+/// Helper to verify admin token
+fn verify_admin(state: &AppState, headers: &axum::http::HeaderMap) -> Result<(), ApiError> {
+    let admin = state.admin.as_ref()
+        .ok_or_else(|| ApiError("Admin not configured".to_string()))?;
+    
+    let token = headers.get("Authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .ok_or_else(|| ApiError("Unauthorized".to_string()))?;
+    
+    if !admin.verify_token(token) {
+        return Err(ApiError("Invalid or expired token".to_string()));
+    }
+    Ok(())
+}
+
+/// GET /api/admin/stats - Get admin stats
+pub async fn admin_stats(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<ApiResponse<AdminStatsResponse>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    let db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let (pastes, comments, sensitive) = db.get_db_stats()
+        .map_err(|e| ApiError(format!("Database error: {}", e)))?;
+    
+    Ok(Json(ApiResponse::ok(AdminStatsResponse {
+        total_pastes: pastes,
+        total_comments: comments,
+        sensitive_pastes: sensitive,
+        sources_enabled: vec!["pastebin".into(), "gists".into(), "hastebin".into()],
+    })))
+}
+
+/// GET /api/admin/pastes - List all pastes (paginated)
+pub async fn admin_list_pastes(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<ApiResponse<Vec<AdminPasteItem>>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    let limit: usize = params.get("limit").and_then(|v| v.parse().ok()).unwrap_or(50);
+    let offset: usize = params.get("offset").and_then(|v| v.parse().ok()).unwrap_or(0);
+    
+    let db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let pastes = db.get_all_pastes(limit, offset)
+        .map_err(|e| ApiError(format!("Database error: {}", e)))?;
+    
+    let items: Vec<AdminPasteItem> = pastes.into_iter().map(|p| {
+        let preview = p.content.chars().take(200).collect::<String>();
+        AdminPasteItem {
+            id: p.id,
+            title: p.title,
+            source: p.source,
+            content_preview: preview,
+            is_sensitive: p.is_sensitive,
+            created_at: p.created_at,
+            view_count: p.view_count,
+        }
+    }).collect();
+    
+    Ok(Json(ApiResponse::ok(items)))
+}
+
+/// DELETE /api/admin/paste/:id - Delete a paste
+pub async fn admin_delete_paste(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<bool>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    let mut db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let deleted = db.delete_paste(&id)
+        .map_err(|e| ApiError(format!("Failed to delete: {}", e)))?;
+    
+    Ok(Json(ApiResponse::ok(deleted)))
+}
+
+/// DELETE /api/admin/comment/:id - Delete a comment
+pub async fn admin_delete_comment(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<bool>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    let mut db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let deleted = db.delete_comment(&id)
+        .map_err(|e| ApiError(format!("Failed to delete: {}", e)))?;
+    
+    Ok(Json(ApiResponse::ok(deleted)))
+}
+
+/// DELETE /api/admin/source/:name - Purge all pastes from a source
+pub async fn admin_purge_source(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Path(source): Path<String>,
+) -> Result<Json<ApiResponse<usize>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    let mut db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let count = db.purge_source(&source)
+        .map_err(|e| ApiError(format!("Failed to purge: {}", e)))?;
+    
+    Ok(Json(ApiResponse::ok(count)))
 }

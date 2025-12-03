@@ -60,6 +60,10 @@ pastebin_api_key = ""
 # Optional: GitHub token for higher rate limits
 github_token = ""
 
+[admin]
+# Admin password - CHANGE THIS!
+password = "{{ADMIN_PASSWORD}}"
+
 [patterns]
 # Toggle detection categories
 aws_keys = true

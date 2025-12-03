@@ -298,31 +298,73 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         Ok(changes)
     }
 
-    /// Insert a comment
+    /// Insert a comment (with optional parent for replies)
     pub fn insert_comment(&mut self, comment: &Comment) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO comments (id, paste_id, content, created_at) VALUES (?, ?, ?, ?)",
-            params![comment.id, comment.paste_id, comment.content, comment.created_at],
+            "INSERT INTO comments (id, paste_id, parent_id, content, created_at) VALUES (?, ?, ?, ?, ?)",
+            params![comment.id, comment.paste_id, comment.parent_id, comment.content, comment.created_at],
         )?;
         Ok(())
     }
 
-    /// Get comments for a paste
+    /// Get comments for a paste (including replies)
     pub fn get_comments(&self, paste_id: &str) -> Result<Vec<Comment>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, paste_id, content, created_at FROM comments WHERE paste_id = ? ORDER BY created_at ASC",
+            "SELECT id, paste_id, parent_id, content, created_at FROM comments WHERE paste_id = ? ORDER BY created_at ASC",
         )?;
         let comments = stmt
             .query_map(params![paste_id], |row| {
                 Ok(Comment {
                     id: row.get(0)?,
                     paste_id: row.get(1)?,
-                    content: row.get(2)?,
-                    created_at: row.get(3)?,
+                    parent_id: row.get(2)?,
+                    content: row.get(3)?,
+                    created_at: row.get(4)?,
                 })
             })?
             .collect::<SqlResult<Vec<_>>>()?;
         Ok(comments)
+    }
+
+    // === ADMIN METHODS ===
+
+    /// Delete a paste by ID (admin only)
+    pub fn delete_paste(&mut self, id: &str) -> Result<bool> {
+        let changes = self.conn.execute("DELETE FROM pastes WHERE id = ?", params![id])?;
+        Ok(changes > 0)
+    }
+
+    /// Delete a comment by ID (admin only)
+    pub fn delete_comment(&mut self, id: &str) -> Result<bool> {
+        let changes = self.conn.execute("DELETE FROM comments WHERE id = ?", params![id])?;
+        Ok(changes > 0)
+    }
+
+    /// Get all pastes (admin - paginated)
+    pub fn get_all_pastes(&self, limit: usize, offset: usize) -> Result<Vec<Paste>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, source, source_id, title, author, content, content_hash, url, 
+             syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+             FROM pastes ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        )?;
+        let pastes = stmt
+            .query_map(params![limit, offset], Self::row_to_paste)?
+            .collect::<SqlResult<Vec<_>>>()?;
+        Ok(pastes)
+    }
+
+    /// Get database stats (admin)
+    pub fn get_db_stats(&self) -> Result<(i64, i64, i64)> {
+        let paste_count: i64 = self.conn.query_row("SELECT COUNT(*) FROM pastes", [], |r| r.get(0))?;
+        let comment_count: i64 = self.conn.query_row("SELECT COUNT(*) FROM comments", [], |r| r.get(0))?;
+        let sensitive_count: i64 = self.conn.query_row("SELECT COUNT(*) FROM pastes WHERE is_sensitive = 1", [], |r| r.get(0))?;
+        Ok((paste_count, comment_count, sensitive_count))
+    }
+
+    /// Purge all pastes from a source (admin)
+    pub fn purge_source(&mut self, source: &str) -> Result<usize> {
+        let changes = self.conn.execute("DELETE FROM pastes WHERE source = ?", params![source])?;
+        Ok(changes)
     }
 
     /// Get comment count for a paste

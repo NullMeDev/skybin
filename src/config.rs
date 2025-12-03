@@ -21,6 +21,14 @@ pub struct Config {
     pub sources: SourcesConfig,
     pub apis: ApisConfig,
     pub patterns: PatternsConfig,
+    #[serde(default)]
+    pub admin: AdminConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AdminConfig {
+    #[serde(default)]
+    pub password: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
