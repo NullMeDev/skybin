@@ -67,6 +67,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/upload", get(handlers::serve_upload))
         .route("/changelog", get(handlers::serve_changelog))
         .route("/paste/:id", get(handlers::serve_paste))
+        .route("/status", get(handlers::serve_status))
         .route("/raw/:id", get(handlers::raw_paste))
         // Static assets
         .nest_service("/static", ServeDir::new("static"))

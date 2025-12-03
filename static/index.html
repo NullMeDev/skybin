@@ -9,7 +9,7 @@
 <body>
     <nav>
         <div class="container">
-            <a href="/" class="logo">SkyBin <span>v1.1.0</span></a>
+            <a href="/" class="logo">SkyBin <span>v1.3.0</span></a>
             <ul class="nav-links">
                 <li><a href="/" class="active">Feed</a></li>
                 <li><a href="/search">Search</a></li>
@@ -41,9 +41,9 @@
                     <div class="stat-value" id="stat-recent">--</div>
                     <div class="stat-label">Last 24h</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-value">18</div>
-                    <div class="stat-label">Sources</div>
+                <div class="stat" id="sources-stat" style="cursor: pointer;" onclick="toggleSourcesModal()">
+                    <div class="stat-value" id="stat-sources">--</div>
+                    <div class="stat-label">Sources ▼</div>
                 </div>
             </div>
 
@@ -69,13 +69,24 @@
         </div>
     </main>
 
+    <!-- Sources Modal -->
+    <div id="sources-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center;">
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 70vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="color: var(--text-primary);">Source Status</h3>
+                <button onclick="toggleSourcesModal()" style="background: none; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer;">×</button>
+            </div>
+            <div id="sources-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+        </div>
+    </div>
+
     <footer>
         <div class="container">
             <div class="footer-content">
-                <div>SkyBin - Secure Paste Aggregator</div>
+                <div style="display: flex; align-items: center; gap: 8px;">Made with <span style="color: #ff6b6b;">❤</span> by <a href="https://github.com/NullMeDev" target="_blank" style="color: var(--primary);">NullMeDev</a></div>
                 <ul class="footer-links">
-                    <li><a href="/api/health">API Status</a></li>
-                    <li><a href="https://nullmedev.github.io/skybin/">Documentation</a></li>
+                    <li><a href="/status">Status</a></li>
+                    <li><a href="https://github.com/NullMeDev/skybin" target="_blank">GitHub</a></li>
                 </ul>
             </div>
         </div>
@@ -205,13 +216,94 @@
             loadPastes();
         });
 
+        // Sources data
+        const allSources = [
+            { name: 'pastebin', label: 'Pastebin' },
+            { name: 'gists', label: 'GitHub Gists' },
+            { name: 'ideone', label: 'Ideone' },
+            { name: 'paste_ee', label: 'Paste.ee' },
+            { name: 'rentry', label: 'Rentry' },
+            { name: 'dpaste', label: 'dpaste' },
+            { name: 'hastebin', label: 'Hastebin' },
+            { name: 'slexy', label: 'Slexy' },
+            { name: 'ubuntu_pastebin', label: 'Ubuntu Pastebin' },
+            { name: 'ixio', label: 'ix.io' },
+            { name: 'justpaste', label: 'JustPaste' },
+            { name: 'controlc', label: 'ControlC' },
+            { name: 'pastecode', label: 'Pastecode' },
+            { name: 'dpaste_org', label: 'dpaste.org' },
+            { name: 'defuse', label: 'Defuse' },
+            { name: 'codepad', label: 'Codepad' },
+            { name: 'bpaste', label: 'bpaste' },
+            { name: 'termbin', label: 'Termbin' },
+            { name: 'sprunge', label: 'Sprunge' },
+            { name: 'paste_rs', label: 'paste.rs' },
+            { name: 'paste2', label: 'Paste2' },
+            { name: 'pastebin_pl', label: 'Pastebin.pl' },
+            { name: 'quickpaste', label: 'Quickpaste' },
+            { name: 'ghostbin', label: 'Ghostbin' },
+        ];
+        let sourcesStatus = {};
+
+        async function loadSourcesStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/health`);
+                const data = await res.json();
+                // For now, assume all sources enabled are "up"
+                const sourceCount = allSources.length;
+                document.getElementById('stat-sources').textContent = sourceCount;
+                
+                // Mark sources based on recent activity
+                const statsRes = await fetch(`${API_BASE}/stats`);
+                const statsData = await statsRes.json();
+                if (statsData.success && statsData.data.by_source) {
+                    allSources.forEach(s => {
+                        sourcesStatus[s.name] = statsData.data.by_source[s.name] > 0 ? 'active' : 'idle';
+                    });
+                }
+            } catch (e) {
+                document.getElementById('stat-sources').textContent = allSources.length;
+            }
+        }
+
+        function toggleSourcesModal() {
+            const modal = document.getElementById('sources-modal');
+            if (modal.style.display === 'flex') {
+                modal.style.display = 'none';
+            } else {
+                modal.style.display = 'flex';
+                renderSourcesList();
+            }
+        }
+
+        function renderSourcesList() {
+            const list = document.getElementById('sources-list');
+            list.innerHTML = allSources.map(s => {
+                const status = sourcesStatus[s.name] || 'idle';
+                const color = status === 'active' ? '#00ff88' : '#888';
+                return `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-primary); border-radius: 6px;">
+                        <span style="color: var(--text-primary);">${s.label}</span>
+                        <span style="color: ${color}; font-size: 12px;">● ${status === 'active' ? 'Active' : 'Idle'}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Close modal on outside click
+        document.getElementById('sources-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'sources-modal') toggleSourcesModal();
+        });
+
         // Initial load
         loadStats();
         loadPastes();
+        loadSourcesStatus();
 
         // Auto-refresh every 30 seconds
         setInterval(() => {
             loadStats();
+            loadSourcesStatus();
             if (currentPage === 0) loadPastes();
         }, 30000);
     </script>

@@ -61,6 +61,7 @@ const SEARCH_HTML: &str = include_str!("../../static/search.html");
 const UPLOAD_HTML: &str = include_str!("../../static/upload.html");
 const PASTE_HTML: &str = include_str!("../../static/paste.html");
 const CHANGELOG_HTML: &str = include_str!("../../static/changelog.html");
+const STATUS_HTML: &str = include_str!("../../static/status.html");
 const ADMIN_HTML: &str = include_str!("../../static/admin.html");
 
 /// GET / - Dashboard HTML page
@@ -86,6 +87,11 @@ pub async fn serve_paste() -> impl IntoResponse {
 /// GET /changelog - Changelog HTML page
 pub async fn serve_changelog() -> impl IntoResponse {
     Html(CHANGELOG_HTML)
+}
+
+/// GET /status - Status page
+pub async fn serve_status() -> impl IntoResponse {
+    Html(STATUS_HTML)
 }
 
 /// GET /x - Admin panel (hidden)

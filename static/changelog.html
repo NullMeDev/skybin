@@ -56,13 +56,13 @@
 <body>
     <nav>
         <div class="container">
-            <a href="/" class="logo">SkyBin <span>v1.1.0</span></a>
+            <a href="/" class="logo">SkyBin <span>v1.3.0</span></a>
             <ul class="nav-links">
                 <li><a href="/">Feed</a></li>
                 <li><a href="/search">Search</a></li>
                 <li><a href="/upload">Upload</a></li>
                 <li><a href="/changelog" class="active">Changelog</a></li>
-                <li><a href="https://github.com/NullMeDev/skybin" target="_blank">GitHub</a></li>
+                <li><a href="/status">Status</a></li>
             </ul>
             <a href="/upload" class="btn btn-primary btn-sm">New Paste</a>
         </div>
@@ -73,6 +73,25 @@
             <div class="page-header">
                 <h1>Changelog</h1>
                 <p>Release history and updates for SkyBin</p>
+            </div>
+
+            <div class="changelog-entry">
+                <h3>
+                    <span class="version">v1.3.0</span>
+                    Unrestricted Scraping Update
+                </h3>
+                <div class="date">January 2025</div>
+                <ul>
+                    <li><span class="tag tag-feature">New</span> 24 paste sources enabled - massive expansion</li>
+                    <li><span class="tag tag-feature">New</span> Professional status page with real-time monitoring</li>
+                    <li><span class="tag tag-feature">New</span> Clickable sources widget showing live source status</li>
+                    <li><span class="tag tag-feature">New</span> Admin bulk delete - select multiple pastes at once</li>
+                    <li><span class="tag tag-feature">New</span> Pastebin API integration for better scraping</li>
+                    <li><span class="tag tag-perf">Improved</span> Removed all content filters - captures everything</li>
+                    <li><span class="tag tag-perf">Improved</span> Reduced scrape delays for faster collection</li>
+                    <li><span class="tag tag-perf">Improved</span> Increased paste limits per scrape cycle</li>
+                    <li><span class="tag tag-fix">Fixed</span> Updated footer and branding across all pages</li>
+                </ul>
             </div>
 
             <div class="changelog-entry">
@@ -164,10 +183,10 @@
     <footer>
         <div class="container">
             <div class="footer-content">
-                <div>SkyBin - Secure Paste Aggregator</div>
+                <div>Made with ❤ by <a href="https://github.com/NullMeDev" target="_blank">NullMeDev</a></div>
                 <ul class="footer-links">
-                    <li><a href="/api/health">API Status</a></li>
-                    <li><a href="https://github.com/NullMeDev/skybin">GitHub</a></li>
+                    <li><a href="/status">Status</a></li>
+                    <li><a href="https://github.com/NullMeDev/skybin" target="_blank">GitHub</a></li>
                 </ul>
             </div>
         </div>

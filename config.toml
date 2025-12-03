@@ -25,26 +25,26 @@ user_agents = [
 ]
 
 [sources]
-# Primary reliable sources
-pastebin = true       # Most active, high-value content
-gists = true          # GitHub gists - often has config files, keys
-paste_ee = true       # Good mix of content
-rentry = true         # Markdown pastes, often logs/configs
+# ALL SOURCES ENABLED - NO FILTERS
+pastebin = true       # Most active
+gists = true          # GitHub gists
+paste_ee = true       # Paste.ee
+rentry = true         # Markdown pastes
 dpaste = true         # Developer-focused
 hastebin = true       # Developer pastes
 slexy = true          # General purpose
-ubuntu_pastebin = true # Linux configs, logs
-ghostbin = false      # Often down
-ixio = true           # Unix-style pastes  
-justpaste = true      # General purpose, combo lists
+ubuntu_pastebin = true # Linux configs
+ghostbin = true       # Try it
+ixio = true           # Unix-style
+justpaste = true      # General purpose
 controlc = true       # General purpose
 pastecode = true      # Code-focused
 dpaste_org = true     # Python-focused
 defuse = true         # Security-related
-codepad = false       # Mostly trivial code exercises
-ideone = false        # DISABLED - floods with student homework
+codepad = true        # Code exercises
+ideone = true         # Code - ALL content accepted
 bpaste = true         # General paste
-termbin = true        # CLI pastes, often configs
+termbin = true        # CLI pastes
 sprunge = true        # CLI pastes
 paste_rs = true       # Rust community
 paste2 = true         # General purpose
