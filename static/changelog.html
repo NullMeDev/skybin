@@ -56,7 +56,7 @@
 <body>
     <nav>
         <div class="container">
-            <a href="/" class="logo">SkyBin <span>v1.6.1</span></a>
+            <a href="/" class="logo">SkyBin <span>v1.6.2</span></a>
             <ul class="nav-links">
                 <li><a href="/">Feed</a></li>
                 <li><a href="/search">Search</a></li>
@@ -77,19 +77,18 @@
 
             <div class="changelog-entry">
                 <h3>
-                    <span class="version">v1.6.1</span>
-                    🔧 Bug Fixes & Search Improvements
+                    <span class="version">v1.6.2</span>
+                    🔧 Admin Bulk Delete Controls
                 </h3>
-                <div class="date">January 12, 2025</div>
+                <div class="date">December 5, 2025</div>
                 <ul>
+                    <li><span class="tag tag-feature">New</span> Admin bulk delete: Delete ALL pastes at once</li>
+                    <li><span class="tag tag-feature">New</span> Admin bulk delete: Delete pastes older than N days</li>
+                    <li><span class="tag tag-feature">New</span> Admin bulk delete: Purge by source (dropdown with all sources)</li>
+                    <li><span class="tag tag-feature">New</span> Admin bulk delete: Delete pastes matching search query</li>
+                    <li><span class="tag tag-feature">New</span> API endpoints: /api/x/all, /api/x/older-than/:days, /api/x/sources, /api/x/delete-by-search</li>
                     <li><span class="tag tag-fix">Fixed</span> Removed paste size limit - now accepts pastes up to 100MB</li>
-                    <li><span class="tag tag-fix">Fixed</span> Duplicate paste handling - returns existing paste instead of error when content hash matches</li>
-                    <li><span class="tag tag-fix">Fixed</span> FTS5 search now properly formats queries with wildcard matching and OR logic</li>
-                    <li><span class="tag tag-perf">Improved</span> Telegram BruteLogs extraction - only extracts password files (Passwords.txt, etc.) from archives</li>
-                    <li><span class="tag tag-perf">Improved</span> BruteLogs auto-title generation based on archive source</li>
-                    <li><span class="tag tag-feature">New</span> High-value alert system with CRITICAL badge for important findings</li>
-                    <li><span class="tag tag-feature">New</span> Scraper auto-recovery with exponential backoff</li>
-                    <li><span class="tag tag-feature">New</span> Scraper health monitoring endpoint (/api/scrapers/health)</li>
+                    <li><span class="tag tag-fix">Fixed</span> Duplicate paste handling, FTS5 search, Telegram BruteLogs extraction</li>
                 </ul>
             </div>
 

@@ -764,6 +764,66 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 
         Ok(pastes)
     }
+
+    // === BULK DELETE METHODS ===
+
+    /// Delete ALL pastes (admin only - use with extreme caution)
+    pub fn delete_all_pastes(&mut self) -> Result<usize> {
+        let count = self.conn.execute("DELETE FROM pastes", [])?;
+        Ok(count)
+    }
+
+    /// Batch delete pastes by IDs (admin only)
+    pub fn delete_pastes_by_ids(&mut self, ids: &[String]) -> Result<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        
+        // Use a transaction for batch operations
+        let tx = self.conn.transaction()?;
+        let mut total_deleted = 0;
+        
+        for id in ids {
+            let changes = tx.execute("DELETE FROM pastes WHERE id = ?", params![id])?;
+            total_deleted += changes;
+        }
+        
+        tx.commit()?;
+        Ok(total_deleted)
+    }
+
+    /// Delete pastes older than N days (admin only)
+    pub fn delete_pastes_older_than(&mut self, days: i64) -> Result<usize> {
+        let cutoff = chrono::Utc::now().timestamp() - (days * 24 * 60 * 60);
+        let count = self.conn.execute(
+            "DELETE FROM pastes WHERE created_at < ?",
+            params![cutoff],
+        )?;
+        Ok(count)
+    }
+
+    /// Get list of all unique sources in the database
+    pub fn get_all_sources(&self) -> Result<Vec<(String, i64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT source, COUNT(*) as count FROM pastes GROUP BY source ORDER BY count DESC",
+        )?;
+        let sources = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map(|iter| iter.collect::<SqlResult<Vec<_>>>())??;
+        Ok(sources)
+    }
+
+    /// Delete pastes by search query (admin only)
+    pub fn delete_pastes_by_search(&mut self, query: &str) -> Result<usize> {
+        let fts_query = format_fts_query(query);
+        let count = self.conn.execute(
+            "DELETE FROM pastes WHERE rowid IN (
+                SELECT rowid FROM pastes_fts WHERE pastes_fts MATCH ?
+            )",
+            params![fts_query],
+        )?;
+        Ok(count)
+    }
 }
 
 #[cfg(test)]

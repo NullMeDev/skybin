@@ -143,8 +143,19 @@
                 <div class="quick-actions">
                     <button onclick="loadAll()">🔄 Refresh All</button>
                     <button onclick="loadAnalytics()">📈 Refresh Analytics</button>
-                    <button class="danger" onclick="purgeSource('ideone')">🗑️ Purge Ideone</button>
-                    <button class="danger" onclick="purgeSource('codepad')">🗑️ Purge Codepad</button>
+                    <button class="danger" onclick="confirmDeleteAll()">🗑️ Delete ALL Pastes</button>
+                    <div>
+                        <input id="olderDays" type="number" min="1" placeholder="Days" style="width: 100px; padding: 6px; background: #0a0a0a; border: 1px solid #333; color: #fff;"> 
+                        <button class="danger" onclick="deleteOlderThan()">🗑️ Delete Older Than N Days</button>
+                    </div>
+                    <div>
+                        <select id="sourceSelect" style="padding: 6px; background: #0a0a0a; border: 1px solid #333; color: #fff;"></select>
+                        <button class="danger" onclick="purgeSelectedSource()">🗑️ Purge Selected Source</button>
+                    </div>
+                    <div>
+                        <input id="searchDelete" type="text" placeholder="Delete by search query" style="width: 240px; padding: 6px; background: #0a0a0a; border: 1px solid #333; color: #fff;">
+                        <button class="danger" onclick="deleteBySearch()">🗑️ Delete Matching</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -305,6 +316,7 @@
         }
 
         async function loadStats() {
+            await loadSources();
             try {
                 const res = await fetch('/api/x/stats', {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -382,6 +394,10 @@
 
         async function purgeSource(source) {
             if (!confirm(`Purge ALL pastes from ${source}? This cannot be undone.`)) return;
+            await purgeBySource(source);
+        }
+
+        async function purgeBySource(source) {
             try {
                 const res = await fetch(`/api/x/source/${source}`, {
                     method: 'DELETE',
@@ -400,7 +416,7 @@
             }
         }
 
-        function prevPage() { if (currentPage > 0) { currentPage--; loadPastes(); } }
+        function prevPage()
         function nextPage() { currentPage++; loadPastes(); }
 
         function formatDate(ts) {
@@ -511,11 +527,102 @@
         }
 
         function loadAll() {
+            loadSources();
             loadStats();
             loadPastes();
             loadAnalytics();
             loadActivityLogs();
             showToast('Refreshed all data');
+        }
+
+        // Bulk delete helpers
+        async function loadSources() {
+            try {
+                const res = await fetch('/api/x/sources', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const select = document.getElementById('sourceSelect');
+                    select.innerHTML = data.data.map(s => `<option value="${s.source}">${s.source} (${s.count})</option>`).join('');
+                }
+            } catch (e) {}
+        }
+
+        async function confirmDeleteAll() {
+            if (!confirm('Delete ALL pastes? This cannot be undone.')) return;
+            try {
+                const res = await fetch('/api/x/all', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`Deleted ${data.data.deleted} pastes`);
+                    loadPastes();
+                    loadStats();
+                } else {
+                    showToast(data.error || 'Failed to delete all', true);
+                }
+            } catch (e) {
+                showToast('Error deleting all pastes', true);
+            }
+        }
+
+        async function deleteOlderThan() {
+            const days = parseInt(document.getElementById('olderDays').value);
+            if (!days || days < 1) {
+                showToast('Enter valid days', true);
+                return;
+            }
+            if (!confirm(`Delete pastes older than ${days} days?`)) return;
+            try {
+                const res = await fetch(`/api/x/older-than/${days}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`Deleted ${data.data.deleted} old pastes`);
+                    loadPastes();
+                    loadStats();
+                } else {
+                    showToast(data.error || 'Failed to delete old pastes', true);
+                }
+            } catch (e) {
+                showToast('Error deleting old pastes', true);
+            }
+        }
+
+        async function purgeSelectedSource() {
+            const select = document.getElementById('sourceSelect');
+            const source = select.value;
+            if (!source) return;
+            if (!confirm(`Purge all pastes from ${source}?`)) return;
+            await purgeBySource(source);
+        }
+
+        async function deleteBySearch() {
+            const q = document.getElementById('searchDelete').value.trim();
+            if (!q) { showToast('Enter search query', true); return; }
+            if (!confirm(`Delete all pastes matching: ${q}?`)) return;
+            try {
+                const res = await fetch('/api/x/delete-by-search', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: q })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`Deleted ${data.data.deleted} matching pastes`);
+                    loadPastes();
+                    loadStats();
+                } else {
+                    showToast(data.error || 'Failed to delete', true);
+                }
+            } catch (e) {
+                showToast('Error deleting by search', true);
+            }
         }
 
         // Analytics functions

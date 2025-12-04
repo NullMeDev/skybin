@@ -982,3 +982,121 @@ pub async fn admin_activity_counts(
     
     Ok(Json(ApiResponse::ok(items)))
 }
+
+// === BULK DELETE ENDPOINTS ===
+
+#[derive(Debug, Deserialize)]
+pub struct BulkDeleteRequest {
+    pub ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BulkDeleteResponse {
+    pub deleted: usize,
+}
+
+/// POST /api/x/bulk-delete - Batch delete pastes by IDs
+pub async fn admin_bulk_delete(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<BulkDeleteRequest>,
+) -> Result<Json<ApiResponse<BulkDeleteResponse>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    let mut db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let deleted = db.delete_pastes_by_ids(&payload.ids)
+        .map_err(|e| ApiError(format!("Failed to delete pastes: {}", e)))?;
+    
+    Ok(Json(ApiResponse::ok(BulkDeleteResponse { deleted })))
+}
+
+/// DELETE /api/x/all - Delete ALL pastes (dangerous!)
+pub async fn admin_delete_all(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<ApiResponse<BulkDeleteResponse>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    let mut db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let deleted = db.delete_all_pastes()
+        .map_err(|e| ApiError(format!("Failed to delete all pastes: {}", e)))?;
+    
+    Ok(Json(ApiResponse::ok(BulkDeleteResponse { deleted })))
+}
+
+/// DELETE /api/x/older-than/:days - Delete pastes older than N days
+pub async fn admin_delete_older_than(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Path(days): Path<i64>,
+) -> Result<Json<ApiResponse<BulkDeleteResponse>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    if days < 1 {
+        return Err(ApiError("Days must be at least 1".to_string()));
+    }
+    
+    let mut db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let deleted = db.delete_pastes_older_than(days)
+        .map_err(|e| ApiError(format!("Failed to delete old pastes: {}", e)))?;
+    
+    Ok(Json(ApiResponse::ok(BulkDeleteResponse { deleted })))
+}
+
+#[derive(Debug, Serialize)]
+pub struct SourceItem {
+    pub source: String,
+    pub count: i64,
+}
+
+/// GET /api/x/sources - Get all unique sources with counts
+pub async fn admin_list_sources(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<ApiResponse<Vec<SourceItem>>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    let db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let sources = db.get_all_sources()
+        .map_err(|e| ApiError(format!("Failed to get sources: {}", e)))?;
+    
+    let items: Vec<SourceItem> = sources.into_iter()
+        .map(|(source, count)| SourceItem { source, count })
+        .collect();
+    
+    Ok(Json(ApiResponse::ok(items)))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeleteBySearchRequest {
+    pub query: String,
+}
+
+/// POST /api/x/delete-by-search - Delete pastes matching search query
+pub async fn admin_delete_by_search(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<DeleteBySearchRequest>,
+) -> Result<Json<ApiResponse<BulkDeleteResponse>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    if payload.query.trim().is_empty() {
+        return Err(ApiError("Search query cannot be empty".to_string()));
+    }
+    
+    let mut db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let deleted = db.delete_pastes_by_search(&payload.query)
+        .map_err(|e| ApiError(format!("Failed to delete pastes: {}", e)))?;
+    
+    Ok(Json(ApiResponse::ok(BulkDeleteResponse { deleted })))
+}

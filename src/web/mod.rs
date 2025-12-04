@@ -99,6 +99,12 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/x/analytics", get(handlers::admin_analytics))
         .route("/api/x/activity", get(handlers::admin_activity_logs))
         .route("/api/x/activity/counts", get(handlers::admin_activity_counts))
+        // Bulk delete endpoints
+        .route("/api/x/sources", get(handlers::admin_list_sources))
+        .route("/api/x/bulk-delete", post(handlers::admin_bulk_delete))
+        .route("/api/x/all", delete(handlers::admin_delete_all))
+        .route("/api/x/older-than/:days", delete(handlers::admin_delete_older_than))
+        .route("/api/x/delete-by-search", post(handlers::admin_delete_by_search))
         // Admin panel page (hidden)
         .route("/x", get(handlers::serve_admin))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // 100MB limit for large paste uploads
