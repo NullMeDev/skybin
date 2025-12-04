@@ -170,11 +170,13 @@ ARCHIVE_EXTENSIONS = ['.zip', '.rar']
 # Max file size for regular files (5MB)
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
-# Max file size for archives (3GB - downloaded to temp, extracted, then deleted)
-MAX_ARCHIVE_SIZE = 3 * 1024 * 1024 * 1024
+# Max file size for archives (5GB - downloaded to temp, extracted, then deleted)
+# With 80GB VPS and 5 concurrent downloads, worst case = 25GB temp usage
+MAX_ARCHIVE_SIZE = 5 * 1024 * 1024 * 1024
 
-# Concurrent file downloads limit
-MAX_CONCURRENT_DOWNLOADS = 2
+# Concurrent file downloads limit (5 parallel downloads)
+# Each downloads to temp, extracts text, posts, then deletes before next batch
+MAX_CONCURRENT_DOWNLOADS = 5
 
 def should_exclude(text: str) -> bool:
     """Check if text should be excluded (Stripe checkout links, etc.)"""
