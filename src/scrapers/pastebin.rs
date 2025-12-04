@@ -1,3 +1,4 @@
+use super::credential_filter::contains_credentials;
 use super::traits::{Scraper, ScraperResult};
 use crate::models::DiscoveredPaste;
 use async_trait::async_trait;
@@ -87,8 +88,8 @@ impl Scraper for PastebinScraper {
                 Ok(content_response) => {
                     if content_response.status().is_success() {
                         if let Ok(content) = content_response.text().await {
-                            // Accept ALL content - NO SIZE LIMITS
-                            if !content.is_empty() {
+                            // Only keep pastes with credentials
+                            if !content.is_empty() && contains_credentials(&content) {
                                 let paste = DiscoveredPaste::new("pastebin", paste_id, content)
                                     .with_title(title.to_string())
                                     .with_url(format!("https://pastebin.com/{}", paste_id))

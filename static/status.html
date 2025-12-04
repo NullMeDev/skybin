@@ -174,12 +174,14 @@
                 document.getElementById('api-indicator').classList.remove('offline');
                 document.getElementById('api-indicator').classList.add('online');
                 
-                // Database status
-                if (data.database === 'ok') {
+                // Database status - checks for 'connected' not 'ok'
+                if (data.database === 'connected') {
                     document.getElementById('db-status').textContent = 'Online';
+                    document.getElementById('db-indicator').classList.remove('offline');
                     document.getElementById('db-indicator').classList.add('online');
                 } else {
                     document.getElementById('db-status').textContent = 'Offline';
+                    document.getElementById('db-indicator').classList.remove('online');
                     document.getElementById('db-indicator').classList.add('offline');
                 }
                 

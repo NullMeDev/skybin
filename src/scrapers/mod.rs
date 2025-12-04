@@ -1,6 +1,7 @@
 pub mod bpaste;
 pub mod codepad;
 pub mod controlc;
+pub mod credential_filter;
 pub mod defuse;
 pub mod dpaste;
 pub mod dpaste_org;

@@ -223,6 +223,50 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         Ok(pastes)
     }
 
+    /// Get pastes filtered by source and/or sensitive flag
+    pub fn get_filtered_pastes(&self, source: Option<&str>, sensitive: Option<bool>, limit: usize, offset: usize) -> Result<Vec<Paste>> {
+        let sql = match (source, sensitive) {
+            (Some(_), Some(s)) => format!(
+                "SELECT id, source, source_id, title, author, content, content_hash, url, 
+                 syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+                 FROM pastes WHERE source = ?1 AND is_sensitive = ?2 ORDER BY created_at DESC LIMIT ?3 OFFSET ?4"
+            ),
+            (Some(_), None) => format!(
+                "SELECT id, source, source_id, title, author, content, content_hash, url, 
+                 syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+                 FROM pastes WHERE source = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3"
+            ),
+            (None, Some(_)) => format!(
+                "SELECT id, source, source_id, title, author, content, content_hash, url, 
+                 syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+                 FROM pastes WHERE is_sensitive = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3"
+            ),
+            (None, None) => return self.get_recent_pastes_offset(limit, offset),
+        };
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        
+        let pastes = match (source, sensitive) {
+            (Some(src), Some(sens)) => {
+                let sens_int = if sens { 1 } else { 0 };
+                stmt.query_map(params![src, sens_int, limit, offset], Self::row_to_paste)?
+                    .collect::<SqlResult<Vec<_>>>()?
+            }
+            (Some(src), None) => {
+                stmt.query_map(params![src, limit, offset], Self::row_to_paste)?
+                    .collect::<SqlResult<Vec<_>>>()?
+            }
+            (None, Some(sens)) => {
+                let sens_int = if sens { 1 } else { 0 };
+                stmt.query_map(params![sens_int, limit, offset], Self::row_to_paste)?
+                    .collect::<SqlResult<Vec<_>>>()?
+            }
+            (None, None) => unreachable!(),
+        };
+
+        Ok(pastes)
+    }
+
     /// Get interesting pastes (with high-value pattern matches like API keys, tokens, SSH keys)
     /// Excludes false positives like generic credit cards and AWS account IDs
     pub fn get_interesting_pastes(&self, limit: usize, offset: usize) -> Result<Vec<Paste>> {

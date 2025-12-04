@@ -1,5 +1,6 @@
 use crate::models::DiscoveredPaste;
 use async_trait::async_trait;
+use super::credential_filter::contains_credentials;
 use super::traits::{Scraper, ScraperResult};
 
 pub struct IdeoneScraper;
@@ -44,8 +45,8 @@ impl Scraper for IdeoneScraper {
                     .await
                 {
                     if let Ok(content) = content_resp.text().await {
-                        // Accept ALL non-empty content - NO FILTERING
-                        if !content.is_empty() && content.len() < 500000 {
+                        // Only keep pastes with credentials
+                        if !content.is_empty() && content.len() < 500000 && contains_credentials(&content) {
                             pastes.push(DiscoveredPaste::new("ideone", paste_id, content)
                                 .with_url(format!("https://ideone.com/{}", paste_id)));
                         }

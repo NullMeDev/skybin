@@ -1,3 +1,4 @@
+use super::credential_filter::contains_credentials;
 use super::traits::{Scraper, ScraperResult};
 use crate::models::DiscoveredPaste;
 use async_trait::async_trait;
@@ -137,6 +138,11 @@ impl Scraper for GitHubGistsScraper {
 
                 // Skip empty content
                 if content.is_empty() {
+                    continue;
+                }
+
+                // Only keep gists that contain potential credentials
+                if !contains_credentials(&content) {
                     continue;
                 }
 
