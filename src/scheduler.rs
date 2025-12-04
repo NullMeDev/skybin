@@ -38,8 +38,10 @@ impl Scheduler {
         &mut self,
         discovered: crate::models::DiscoveredPaste,
     ) -> anyhow::Result<()> {
-        // Quality filters DISABLED - admin will moderate content manually
-        // All content is now accepted for review in the admin panel
+        // CREDENTIAL-ONLY FILTER: Only store pastes with actual credentials
+        if !Self::has_credentials(&discovered.content) {
+            return Ok(());
+        }
 
         // Anonymize the paste before storing (strip authors, URLs, etc)
         let anonymization_config = crate::anonymization::AnonymizationConfig::default();
@@ -91,6 +93,64 @@ impl Scheduler {
         Ok(())
     }
 
+    /// Check if content contains actual credentials (not just keywords)
+    fn has_credentials(content: &str) -> bool {
+        use crate::scrapers::credential_filter::contains_credentials;
+        use regex::Regex;
+        use once_cell::sync::Lazy;
+        
+        // Minimum length requirement
+        if content.len() < 50 {
+            return false;
+        }
+        
+        let content_lower = content.to_lowercase();
+        
+        // Check for private keys (always accept)
+        if content.contains("-----BEGIN") && content.contains("PRIVATE KEY-----") {
+            return true;
+        }
+        
+        // Check for credential patterns (API keys, tokens, etc) - accept 1+
+        if contains_credentials(content) {
+            return true;
+        }
+        
+        // Check for email:password combos - accept 1+
+        static EMAIL_PASS: Lazy<Regex> = Lazy::new(|| {
+            Regex::new(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@]{4,}").unwrap()
+        });
+        if EMAIL_PASS.is_match(content) {
+            return true;
+        }
+        
+        // Check for URL:login:pass format (stealer logs) - accept 1+
+        static ULP: Lazy<Regex> = Lazy::new(|| {
+            Regex::new(r"https?://[^\s]+[\s\t|:]+[^\s@]+[\s\t|:]+[^\s]{4,}").unwrap()
+        });
+        if ULP.is_match(content) {
+            return true;
+        }
+        
+        // Check for leak keywords (need 3+ for keyword-only detection)
+        let leak_keywords = [
+            "leak", "leaked", "dump", "dumped", "combo", "combolist", "breach",
+            "crack", "cracked", "hacked", "stolen", "exposed", "database",
+            "credential", "password", "stealer", "infostealer", "redline", "raccoon",
+            "netflix", "spotify", "disney", "vpn", "steam", "fortnite",
+            "paypal", "crypto", "bitcoin", "wallet", "api key", "apikey",
+            "token", "secret", "ssh", "ftp", "smtp", "cpanel", "rdp",
+            "fresh", "valid", "checked", "hits", "email:pass", "user:pass",
+            "bin", "fullz", "cvv", "ssn",
+        ];
+        let keyword_count = leak_keywords.iter().filter(|kw| content_lower.contains(*kw)).count();
+        if keyword_count >= 3 {
+            return true;
+        }
+        
+        false
+    }
+    
     /// Global quality check for all pastes - DISABLED for admin moderation
     #[allow(dead_code)]
     fn passes_quality_check(content: &str) -> bool {

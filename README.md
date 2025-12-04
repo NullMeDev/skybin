@@ -1,23 +1,22 @@
-# SkyBin v1.3.0
+# SkyBin v1.4.0
 
-Paste aggregator that monitors public paste sites for leaked credentials, API keys, and sensitive data.
+Paste aggregator that monitors public paste sites and Telegram stealer log channels for leaked credentials, API keys, and sensitive data.
 
 **Live:** https://skybin.lol | https://bin.nullme.lol
 
-## What's New in v1.3.0
+## What's New in v1.4.0
 
-- **24 paste sources** enabled for maximum coverage
-- **No content filters** - captures everything for admin moderation  
-- **Professional /status page** with real-time source monitoring
-- **Clickable sources widget** showing live active/idle status
-- **Admin bulk delete** - select multiple pastes at once
-- **Fixed GitHub Gists** - now fetches actual content
-- **Fixed Ideone** - scraping 24 pastes per cycle
+- **40+ Telegram channels** - monitors stealer log clouds (Daisy, Bugatti, Cuckoo, Moon, StarLink, etc.)
+- **Expanded detection** - 50+ leak keywords, platform-specific token patterns
+- **Lowered thresholds** - accepts single credentials (was 5+ email:pass, now 1+)
+- **Keyword filtering** - 3+ leak keywords triggers acceptance
+- **Sources research** - integrated findings from SOCRadar, KELA, Group-IB
 
 ## Features
 
-- Scrapes 24 paste sites every 30 seconds
-- 41 detection patterns for credentials, tokens, API keys
+- **Telegram scraper** with 40+ stealer log channels
+- Scrapes 24+ paste sites every 30 seconds
+- 50+ detection patterns for credentials, tokens, API keys
 - Smart auto-titling (identifies Disney+, Netflix, Spotify logins, etc.)
 - **Anonymous comments** on pastes - no login required
 - **Export to JSON/CSV** for offline analysis
