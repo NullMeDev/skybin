@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-SkyBin Telegram Scraper Service v2.1
+SkyBin Telegram Scraper Service v2.2
 - Auto-discovers leak channels from your dialogs
 - Joins known active channels
 - Monitors all channels/groups you're in
-- Downloads and processes .txt/.csv/.json files
-- Filters out Stripe checkout links and payment content
+- Downloads .txt/.csv/.json/.sql/.log/.env files
+- Extracts text from .zip and .rar archives (up to 200MB)
+- Filters Stripe checkout URLs (allows API keys)
 - Auto-generates titles based on content analysis
 - Posts found leaks incrementally to SkyBin API
 """
@@ -18,8 +19,17 @@ import json
 import logging
 import aiohttp
 import tempfile
+import zipfile
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+
+# Try to import rarfile for .rar support
+try:
+    import rarfile
+    HAS_RARFILE = True
+except ImportError:
+    HAS_RARFILE = False
+    logging.warning("rarfile not installed - .rar extraction disabled. Install with: pip install rarfile")
 from telethon import TelegramClient, events, functions
 from telethon.tl.types import Channel, Chat, User, InputPeerChannel, DocumentAttributeFilename
 from telethon.tl.functions.channels import JoinChannelRequest
@@ -134,19 +144,15 @@ CREDENTIAL_PATTERNS = [
     re.compile(r'AIza[0-9A-Za-z_-]{35}'),  # Firebase/Google
 ]
 
-# Patterns to EXCLUDE (Stripe checkout, payment processors)
+# Patterns to EXCLUDE (Stripe checkout URLs only - NOT API keys)
 EXCLUDE_PATTERNS = [
     re.compile(r'(?i)checkout\.stripe\.com'),
     re.compile(r'(?i)buy\.stripe\.com'),
     re.compile(r'(?i)stripe\.com/links'),
-    re.compile(r'sk_live_[a-zA-Z0-9]{24,}'),  # Stripe Live key
-    re.compile(r'sk_test_[a-zA-Z0-9]{24,}'),  # Stripe Test key
-    re.compile(r'pk_live_[a-zA-Z0-9]{24,}'),  # Stripe Publishable key
-    re.compile(r'pk_test_[a-zA-Z0-9]{24,}'),  # Stripe Publishable test key
-    re.compile(r'(?i)price_[a-zA-Z0-9]{24,}'),  # Stripe Price ID
-    re.compile(r'(?i)prod_[a-zA-Z0-9]{14,}'),  # Stripe Product ID
-    re.compile(r'(?i)cs_live_[a-zA-Z0-9]+'),  # Checkout session
-    re.compile(r'(?i)cs_test_[a-zA-Z0-9]+'),  # Test checkout session
+    re.compile(r'(?i)stripe\.com/pay'),
+    # Block checkout session URLs but not the keys themselves
+    re.compile(r'(?i)https?://[^\s]*cs_live_[a-zA-Z0-9]+'),
+    re.compile(r'(?i)https?://[^\s]*cs_test_[a-zA-Z0-9]+'),
 ]
 
 # Minimum counts for credential detection
@@ -156,8 +162,14 @@ MIN_CREDENTIAL_PATTERNS = 1  # Accept single API key/token
 # File extensions that indicate credential files (downloadable)
 CRED_FILE_EXTENSIONS = ['.txt', '.csv', '.json', '.sql', '.log', '.env']
 
-# Max file size to download (5MB to avoid clogging VPS)
+# Archive extensions (will be extracted)
+ARCHIVE_EXTENSIONS = ['.zip', '.rar']
+
+# Max file size for regular files (5MB)
 MAX_FILE_SIZE = 5 * 1024 * 1024
+
+# Max file size for archives (200MB - they compress well)
+MAX_ARCHIVE_SIZE = 200 * 1024 * 1024
 
 # Concurrent file downloads limit
 MAX_CONCURRENT_DOWNLOADS = 2
@@ -484,9 +496,86 @@ class TelegramScraper:
         logger.info(f"Total channels/groups to monitor: {len(self.active_channels)}")
         return self.active_channels
     
+    async def extract_text_from_archive(self, buffer: io.BytesIO, filename: str, channel_name: str) -> int:
+        """
+        Extract text files from a zip/rar archive and post them.
+        Returns number of files processed.
+        """
+        processed = 0
+        lower_filename = filename.lower()
+        
+        try:
+            if lower_filename.endswith('.zip'):
+                buffer.seek(0)
+                with zipfile.ZipFile(buffer, 'r') as zf:
+                    for info in zf.infolist():
+                        # Skip directories and large files
+                        if info.is_dir() or info.file_size > MAX_FILE_SIZE:
+                            continue
+                        
+                        # Only extract text-like files
+                        inner_name = info.filename.lower()
+                        if any(inner_name.endswith(ext) for ext in CRED_FILE_EXTENSIONS):
+                            try:
+                                data = zf.read(info.filename)
+                                try:
+                                    content = data.decode('utf-8', errors='ignore')
+                                except:
+                                    content = data.decode('latin-1', errors='ignore')
+                                
+                                if is_leak_content(content) or len(content) > 100:
+                                    title = generate_auto_title(content, f"{channel_name}/{filename}")
+                                    await self.post_queue.put((content, title))
+                                    processed += 1
+                                    logger.info(f"    📄 Extracted: {info.filename}")
+                            except Exception as e:
+                                logger.debug(f"    Error extracting {info.filename}: {e}")
+            
+            elif lower_filename.endswith('.rar') and HAS_RARFILE:
+                # Write to temp file for rarfile (it needs a file path)
+                buffer.seek(0)
+                with tempfile.NamedTemporaryFile(suffix='.rar', delete=False) as tmp:
+                    tmp.write(buffer.read())
+                    tmp_path = tmp.name
+                
+                try:
+                    with rarfile.RarFile(tmp_path, 'r') as rf:
+                        for info in rf.infolist():
+                            # Skip directories and large files
+                            if info.is_dir() or info.file_size > MAX_FILE_SIZE:
+                                continue
+                            
+                            inner_name = info.filename.lower()
+                            if any(inner_name.endswith(ext) for ext in CRED_FILE_EXTENSIONS):
+                                try:
+                                    data = rf.read(info.filename)
+                                    try:
+                                        content = data.decode('utf-8', errors='ignore')
+                                    except:
+                                        content = data.decode('latin-1', errors='ignore')
+                                    
+                                    if is_leak_content(content) or len(content) > 100:
+                                        title = generate_auto_title(content, f"{channel_name}/{filename}")
+                                        await self.post_queue.put((content, title))
+                                        processed += 1
+                                        logger.info(f"    📄 Extracted: {info.filename}")
+                                except Exception as e:
+                                    logger.debug(f"    Error extracting {info.filename}: {e}")
+                finally:
+                    os.unlink(tmp_path)  # Clean up temp file
+            
+            elif lower_filename.endswith('.rar') and not HAS_RARFILE:
+                logger.warning(f"  Cannot extract .rar - rarfile not installed")
+                
+        except Exception as e:
+            logger.error(f"  Error extracting archive {filename}: {e}")
+        
+        return processed
+
     async def download_and_process_file(self, message, channel_name: str) -> bool:
         """
         Download a file from Telegram and post its contents.
+        Supports both plain text files and archives (.zip, .rar).
         Returns True if successfully processed.
         """
         if not message.document:
@@ -502,14 +591,19 @@ class TelegramScraper:
         if not filename:
             return False
         
-        # Check extension
-        if not any(filename.lower().endswith(ext) for ext in CRED_FILE_EXTENSIONS):
+        lower_filename = filename.lower()
+        is_archive = any(lower_filename.endswith(ext) for ext in ARCHIVE_EXTENSIONS)
+        is_text_file = any(lower_filename.endswith(ext) for ext in CRED_FILE_EXTENSIONS)
+        
+        if not is_archive and not is_text_file:
             return False
         
-        # Check file size
+        # Check file size (different limits for archives vs text)
         file_size = message.document.size
-        if file_size > MAX_FILE_SIZE:
-            logger.info(f"  Skipping large file: {filename} ({file_size / 1024 / 1024:.1f}MB)")
+        max_size = MAX_ARCHIVE_SIZE if is_archive else MAX_FILE_SIZE
+        
+        if file_size > max_size:
+            logger.info(f"  Skipping large file: {filename} ({file_size / 1024 / 1024:.1f}MB > {max_size / 1024 / 1024:.0f}MB limit)")
             return False
         
         # Create unique file ID
@@ -519,14 +613,29 @@ class TelegramScraper:
         
         try:
             async with self.download_semaphore:
-                logger.info(f"  📥 Downloading: {filename} ({file_size / 1024:.1f}KB)")
+                size_str = f"{file_size / 1024 / 1024:.1f}MB" if file_size > 1024*1024 else f"{file_size / 1024:.1f}KB"
+                logger.info(f"  📥 Downloading: {filename} ({size_str})")
                 
                 # Download to memory (BytesIO)
                 buffer = io.BytesIO()
                 await self.client.download_media(message, buffer)
                 buffer.seek(0)
                 
-                # Try to decode as text
+                self.processed_files.add(file_id)
+                
+                # Handle archives - extract and post each text file
+                if is_archive:
+                    logger.info(f"  📦 Extracting archive: {filename}")
+                    extracted = await self.extract_text_from_archive(buffer, filename, channel_name)
+                    if extracted > 0:
+                        self.files_downloaded += extracted
+                        logger.info(f"  ✓ Extracted {extracted} files from: {filename}")
+                        return True
+                    else:
+                        logger.info(f"  No text files found in archive: {filename}")
+                        return False
+                
+                # Handle plain text files
                 try:
                     content = buffer.read().decode('utf-8', errors='ignore')
                 except:
@@ -547,7 +656,6 @@ class TelegramScraper:
                 
                 # Add to post queue
                 await self.post_queue.put((content, title))
-                self.processed_files.add(file_id)
                 self.files_downloaded += 1
                 logger.info(f"  ✓ Processed file: {filename}")
                 return True
@@ -590,7 +698,8 @@ class TelegramScraper:
                                 filename = attr.file_name
                                 break
                         
-                        if filename and any(filename.lower().endswith(ext) for ext in CRED_FILE_EXTENSIONS):
+                        all_extensions = CRED_FILE_EXTENSIONS + ARCHIVE_EXTENSIONS
+                        if filename and any(filename.lower().endswith(ext) for ext in all_extensions):
                             # Queue file for download
                             file_id = f"{message.chat_id}_{message.id}_{filename}"
                             if file_id not in self.processed_files:
@@ -661,7 +770,8 @@ class TelegramScraper:
                                 filename = attr.file_name
                                 break
                         
-                        if filename and any(filename.lower().endswith(ext) for ext in CRED_FILE_EXTENSIONS):
+                        all_extensions = CRED_FILE_EXTENSIONS + ARCHIVE_EXTENSIONS
+                        if filename and any(filename.lower().endswith(ext) for ext in all_extensions):
                             file_id = f"{event.chat_id}_{event.id}_{filename}"
                             if file_id not in self.processed_files:
                                 await self.file_queue.put((event.message, chat_name))
