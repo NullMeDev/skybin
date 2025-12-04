@@ -101,7 +101,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/x/activity/counts", get(handlers::admin_activity_counts))
         // Admin panel page (hidden)
         .route("/x", get(handlers::serve_admin))
-        .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB limit
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // 100MB limit for large paste uploads
         .layer(CompressionLayer::new())
         .with_state(state)
 }
