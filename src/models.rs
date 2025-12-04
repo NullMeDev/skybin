@@ -90,6 +90,7 @@ pub struct SearchFilters {
     pub query: Option<String>,
     pub source: Option<String>,
     pub is_sensitive: Option<bool>,
+    pub interesting: Option<bool>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
 }

@@ -111,9 +111,15 @@ pub async fn get_pastes(
     
     let limit = filters.limit.unwrap_or(50).min(100) as usize;
     let offset = filters.offset.unwrap_or(0) as usize;
-    let pastes = db
-        .get_recent_pastes_offset(limit, offset)
-        .map_err(|e| ApiError(format!("Failed to fetch pastes: {}", e)))?;
+    
+    // Use interesting filter if requested
+    let pastes = if filters.interesting.unwrap_or(false) {
+        db.get_interesting_pastes(limit, offset)
+            .map_err(|e| ApiError(format!("Failed to fetch interesting pastes: {}", e)))?
+    } else {
+        db.get_recent_pastes_offset(limit, offset)
+            .map_err(|e| ApiError(format!("Failed to fetch pastes: {}", e)))?
+    };
 
     let responses = pastes
         .into_iter()

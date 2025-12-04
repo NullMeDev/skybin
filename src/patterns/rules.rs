@@ -129,12 +129,13 @@ lazy_static! {
             ).unwrap(),
         );
 
-        // Credit Cards (Luhn validated)
+        // Credit Cards - Match major card prefixes with Luhn-like structure
+        // Visa: 4xxx, MC: 51-55, Amex: 34/37, Discover: 6011/65
         m.insert(
             "credit_card".to_string(),
             PatternRule::new(
                 "Credit Card Number",
-                r"\b(?:\d[ -]*?){13,19}\b",
+                r"\b(?:4[0-9]{15}|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b",
                 Severity::Critical,
                 "financial",
             ).unwrap(),
@@ -162,12 +163,12 @@ lazy_static! {
             ).unwrap(),
         );
 
-        // AWS Account ID
+        // AWS Account ID - require context to reduce false positives
         m.insert(
             "aws_account_id".to_string(),
             PatternRule::new(
                 "AWS Account ID",
-                r"\b\d{12}\b",
+                r"(?i)(?:aws|account[_-]?id|arn:aws)\s*[:=]?\s*\d{12}\b",
                 Severity::Moderate,
                 "identifiers",
             ).unwrap(),

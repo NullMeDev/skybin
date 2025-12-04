@@ -223,6 +223,42 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         Ok(pastes)
     }
 
+    /// Get interesting pastes (with high-value pattern matches like API keys, tokens, SSH keys)
+    /// Excludes false positives like generic credit cards and AWS account IDs
+    pub fn get_interesting_pastes(&self, limit: usize, offset: usize) -> Result<Vec<Paste>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, source, source_id, title, author, content, content_hash, url, 
+             syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+             FROM pastes 
+             WHERE is_sensitive = 1 
+             AND matched_patterns IS NOT NULL
+             AND matched_patterns NOT LIKE '%Credit Card%'
+             AND (
+                matched_patterns LIKE '%AWS Access Key%'
+                OR matched_patterns LIKE '%GitHub Token%'
+                OR matched_patterns LIKE '%Stripe%'
+                OR matched_patterns LIKE '%Private Key%'
+                OR matched_patterns LIKE '%Discord%'
+                OR matched_patterns LIKE '%Telegram%'
+                OR matched_patterns LIKE '%Database Connection%'
+                OR matched_patterns LIKE '%JWT%'
+                OR matched_patterns LIKE '%Bearer%'
+                OR matched_patterns LIKE '%API Key%'
+                OR matched_patterns LIKE '%Webhook%'
+                OR matched_patterns LIKE '%OAuth%'
+                OR matched_patterns LIKE '%Password%'
+                OR matched_patterns LIKE '%Secret%'
+             )
+             ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        )?;
+
+        let pastes = stmt
+            .query_map(params![limit, offset], Self::row_to_paste)?
+            .collect::<SqlResult<Vec<_>>>()?;
+
+        Ok(pastes)
+    }
+
     /// Search pastes using full-text search
     pub fn search_pastes(&self, filters: &SearchFilters) -> Result<Vec<Paste>> {
         let query = filters.query.as_deref().unwrap_or("*");

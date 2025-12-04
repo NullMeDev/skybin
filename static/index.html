@@ -9,7 +9,7 @@
 <body>
     <nav>
         <div class="container">
-            <a href="/" class="logo">SkyBin <span>v1.3.0</span></a>
+            <a href="/" class="logo">SkyBin <span>v1.3.1</span></a>
             <ul class="nav-links">
                 <li><a href="/" class="active">Feed</a></li>
                 <li><a href="/search">Search</a></li>
@@ -49,10 +49,11 @@
 
             <div class="filters">
                 <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="interesting" style="background: linear-gradient(135deg, #f39c12, #e74c3c);">🔥 Interesting</button>
                 <button class="filter-btn" data-filter="sensitive">Sensitive Only</button>
                 <button class="filter-btn" data-filter="pastebin">Pastebin</button>
                 <button class="filter-btn" data-filter="gists">Gists</button>
-                <button class="filter-btn" data-filter="external">External</button>
+                <button class="filter-btn" data-filter="ideone">Ideone</button>
             </div>
 
             <div id="paste-container">
@@ -139,6 +140,8 @@
                 
                 if (currentFilter === 'sensitive') {
                     url += '&sensitive=true';
+                } else if (currentFilter === 'interesting') {
+                    url += '&interesting=true';
                 } else if (currentFilter !== 'all') {
                     url += `&source=${currentFilter}`;
                 }

@@ -56,7 +56,7 @@
 <body>
     <nav>
         <div class="container">
-            <a href="/" class="logo">SkyBin <span>v1.3.0</span></a>
+            <a href="/" class="logo">SkyBin <span>v1.3.1</span></a>
             <ul class="nav-links">
                 <li><a href="/">Feed</a></li>
                 <li><a href="/search">Search</a></li>
@@ -73,6 +73,21 @@
             <div class="page-header">
                 <h1>Changelog</h1>
                 <p>Release history and updates for SkyBin</p>
+            </div>
+
+            <div class="changelog-entry">
+                <h3>
+                    <span class="version">v1.3.1</span>
+                    🔥 Interesting Filter Update
+                </h3>
+                <div class="date">December 4, 2025</div>
+                <ul>
+                    <li><span class="tag tag-feature">New</span> "🔥 Interesting" filter - shows only high-value findings (API keys, tokens, SSH keys)</li>
+                    <li><span class="tag tag-feature">New</span> Ideone filter added to filter bar</li>
+                    <li><span class="tag tag-fix">Fixed</span> Credit card regex now matches only valid card prefixes (Visa, MC, Amex, Discover)</li>
+                    <li><span class="tag tag-fix">Fixed</span> AWS Account ID detection now requires context to reduce false positives</li>
+                    <li><span class="tag tag-perf">Improved</span> Reduced false positive rate for sensitive content detection</li>
+                </ul>
             </div>
 
             <div class="changelog-entry">
