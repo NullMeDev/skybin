@@ -6,12 +6,12 @@ use paste_vault::rate_limiter::SourceRateLimiter;
 use paste_vault::scheduler::Scheduler;
 use paste_vault::scrapers::traits::Scraper;
 use paste_vault::scrapers::{
-    BpasteScraper, CodepadScraper, ControlcScraper, DPasteScraper, DefuseScraper, DpasteOrgScraper,
-    ExternalUrlScraper, GhostbinScraper, GitHubGistsScraper, HastebinScraper, IdeoneScraper,
-    IxioScraper, JustPasteScraper, Paste2Scraper, PasteEeScraper, PasteRsScraper,
-    PastebinPlScraper, PastebinScraper, PastecodeScraper, PsbdmpScraper, QuickpasteScraper,
-    RentryScraper, SlexyScraper, SprungeScraper, TermbinScraper, TorPastesScraper,
-    UbuntuPastebinScraper,
+    BpastScraper, BpasteScraper, CodepadScraper, ControlcScraper, DPasteScraper, DefuseScraper,
+    DpasteOrgScraper, ExternalUrlScraper, GhostbinScraper, GitHubGistsScraper, HastebinScraper,
+    IdeoneScraper, IxioScraper, JustPasteScraper, Paste2Scraper, PasteEeScraper, PasteRsScraper,
+    PastebinPlScraper, PastebinScraper, PastecodeScraper, PastesioScraper, PsbdmpScraper,
+    QuickpasteScraper, RentryScraper, SlexyScraper, SprungeScraper, TermbinScraper,
+    TorPastesScraper, UbuntuPastebinScraper,
 };
 use paste_vault::web::{create_router, AppState};
 use std::sync::{Arc, Mutex};
@@ -174,6 +174,12 @@ async fn main() -> anyhow::Result<()> {
     if config.sources.tor_pastes {
         let tor_scraper = TorPastesScraper::with_proxy(config.scraping.proxy.clone());
         spawn_scraper("tor_pastes", Box::new(tor_scraper));
+    }
+    if config.sources.pastesio {
+        spawn_scraper("pastesio", Box::new(PastesioScraper::new()));
+    }
+    if config.sources.bpast {
+        spawn_scraper("bpast", Box::new(BpastScraper::new()));
     }
 
     // External URL scraper

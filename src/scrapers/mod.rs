@@ -1,3 +1,4 @@
+pub mod bpast;
 pub mod bpaste;
 pub mod codepad;
 pub mod controlc;
@@ -18,6 +19,7 @@ pub mod paste2;
 pub mod pastebin_pl;
 pub mod pastecode;
 pub mod pastebin;
+pub mod pastesio;
 pub mod psbdmp;
 pub mod quickpaste;
 pub mod rentry;
@@ -28,6 +30,7 @@ pub mod tor_pastes;
 pub mod traits;
 pub mod ubuntu_pastebin;
 
+pub use bpast::BpastScraper;
 pub use bpaste::BpasteScraper;
 pub use codepad::CodepadScraper;
 pub use controlc::ControlcScraper;
@@ -47,6 +50,7 @@ pub use paste2::Paste2Scraper;
 pub use pastebin_pl::PastebinPlScraper;
 pub use pastecode::PastecodeScraper;
 pub use pastebin::PastebinScraper;
+pub use pastesio::PastesioScraper;
 pub use psbdmp::PsbdmpScraper;
 pub use quickpaste::QuickpasteScraper;
 pub use rentry::RentryScraper;
