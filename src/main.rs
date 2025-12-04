@@ -53,13 +53,17 @@ async fn main() -> anyhow::Result<()> {
     let external_scraper = Arc::new(ExternalUrlScraper::new());
     let external_scraper_clone = external_scraper.clone();
 
-    // Helper to spawn a scraper task with health tracking
+    // Helper to spawn a scraper task with health tracking and exponential backoff recovery
     let spawn_scraper = |name: &'static str, scraper: Box<dyn Scraper + Send + Sync>| {
         let scraper_config = config.clone();
         let detector = detector_clone.clone();
         let rate_limiter = rate_limiter.clone();
         tokio::spawn(async move {
             let client = reqwest::Client::new();
+            let base_interval = scraper_config.scraping.interval_seconds;
+            let max_backoff = 3600u64; // Max 1 hour backoff
+            let mut consecutive_failures = 0u32;
+            
             loop {
                 let result = scraper.fetch_recent(&client).await;
                 
@@ -73,8 +77,15 @@ async fn main() -> anyhow::Result<()> {
                     let _ = stats_db.log_scraper_stat(name, success, pastes_found);
                 }
                 
-                match result {
+                // Calculate next sleep interval with exponential backoff on failure
+                let sleep_interval = match result {
                     Ok(discovered_pastes) => {
+                        // Reset backoff on success
+                        if consecutive_failures > 0 {
+                            println!("✓ [{}] Recovered after {} failures", name, consecutive_failures);
+                        }
+                        consecutive_failures = 0;
+                        
                         if !discovered_pastes.is_empty() {
                             println!("✓ [{}] Fetched {} pastes", name, discovered_pastes.len());
                         }
@@ -82,22 +93,35 @@ async fn main() -> anyhow::Result<()> {
                             Database::open(&scraper_config.storage.db_path).unwrap(),
                             detector.clone(),
                             rate_limiter.clone(),
-                            scraper_config.scraping.interval_seconds,
+                            base_interval,
                         );
                         for paste in discovered_pastes {
                             if let Err(e) = scheduler.process_paste(paste) {
                                 tracing::warn!("[{}] Failed to process paste: {}", name, e);
                             }
                         }
+                        base_interval
                     }
                     Err(e) => {
-                        tracing::error!("[{}] Scraper error: {}", name, e);
+                        consecutive_failures += 1;
+                        
+                        // Exponential backoff: base * 2^failures, capped at max_backoff
+                        let backoff = (base_interval * 2u64.saturating_pow(consecutive_failures.min(10)))
+                            .min(max_backoff);
+                        
+                        if consecutive_failures == 1 {
+                            tracing::warn!("[{}] Scraper error: {} (retry in {}s)", name, e, backoff);
+                        } else {
+                            tracing::warn!(
+                                "[{}] Scraper error (failure #{}, backing off {}s): {}",
+                                name, consecutive_failures, backoff, e
+                            );
+                        }
+                        backoff
                     }
-                }
-                tokio::time::sleep(Duration::from_secs(
-                    scraper_config.scraping.interval_seconds,
-                ))
-                .await;
+                };
+                
+                tokio::time::sleep(Duration::from_secs(sleep_interval)).await;
             }
         });
     };
