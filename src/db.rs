@@ -24,6 +24,36 @@ pub struct ScraperHealth {
     pub status: String,  // "healthy", "degraded", "failing", "stale"
 }
 
+/// Format a search query for FTS5
+/// Escapes special characters and adds prefix matching
+fn format_fts_query(query: &str) -> String {
+    // Split into words and format each
+    let words: Vec<String> = query
+        .split_whitespace()
+        .filter(|w| !w.is_empty())
+        .map(|word| {
+            // Escape quotes in the word
+            let escaped = word.replace('"', "\"\"")
+                .replace('*', "")
+                .replace('(', "")
+                .replace(')', "");
+            // Add wildcard for prefix matching
+            if escaped.len() >= 2 {
+                format!("\"{}\"*", escaped)
+            } else {
+                format!("\"{}\"*", escaped)
+            }
+        })
+        .collect();
+    
+    if words.is_empty() {
+        return "*".to_string();
+    }
+    
+    // Join with OR for more permissive matching
+    words.join(" OR ")
+}
+
 /// Database connection wrapper
 pub struct Database {
     conn: Connection,
@@ -351,9 +381,18 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 
     /// Search pastes using full-text search
     pub fn search_pastes(&self, filters: &SearchFilters) -> Result<Vec<Paste>> {
-        let query = filters.query.as_deref().unwrap_or("*");
-        let limit = filters.limit.unwrap_or(10).min(100);
+        let raw_query = filters.query.as_deref().unwrap_or("").trim();
+        let limit = filters.limit.unwrap_or(25).min(100);
         let offset = filters.offset.unwrap_or(0);
+        
+        // If no query, return recent pastes instead
+        if raw_query.is_empty() {
+            return self.get_recent_pastes_offset(limit, offset);
+        }
+        
+        // Format query for FTS5 - escape special characters and add wildcards
+        // FTS5 treats these as special: AND OR NOT ( ) " * ^
+        let fts_query = format_fts_query(raw_query);
 
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.source, p.source_id, p.title, p.author, p.content, p.content_hash, 
@@ -372,7 +411,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         let pastes = stmt
             .query_map(
                 params![
-                    query,
+                    fts_query,
                     filters.source.as_ref(),
                     filters.source.as_ref(),
                     is_sensitive,

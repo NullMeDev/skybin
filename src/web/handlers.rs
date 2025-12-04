@@ -264,9 +264,21 @@ pub async fn upload_paste_json(
     // Auto-detect language from content
     let detected_lang = crate::lang_detect::detect_language(&payload.content);
 
+    // Compute hash and check for duplicates first
+    let content_hash = crate::hash::compute_hash_normalized(&payload.content);
+    
+    // Check if this exact content already exists
+    if let Ok(Some(existing)) = db.get_paste_by_hash(&content_hash) {
+        // Return existing paste instead of error
+        let response = CreatePasteResponse {
+            id: existing.id.clone(),
+            url: format!("/paste/{}", existing.id),
+        };
+        return Ok((StatusCode::OK, Json(ApiResponse::ok(response))));
+    }
+
     // Create paste (author is always None for complete anonymity)
     let now = Utc::now().timestamp();
-    let content_hash = crate::hash::compute_hash_normalized(&payload.content);
     let paste = crate::models::Paste {
         id: Uuid::new_v4().to_string(),
         source: "web".to_string(),
@@ -287,7 +299,13 @@ pub async fn upload_paste_json(
 
     let id = paste.id.clone();
     db.insert_paste(&paste)
-        .map_err(|e| ApiError(format!("Failed to store paste: {}", e)))?;
+        .map_err(|e| {
+            if e.to_string().contains("UNIQUE constraint") {
+                ApiError("This content has already been submitted".to_string())
+            } else {
+                ApiError(format!("Failed to store paste: {}", e))
+            }
+        })?;
 
     let response = CreatePasteResponse {
         id: id.clone(),

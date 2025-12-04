@@ -569,9 +569,67 @@ class TelegramScraper:
         logger.info(f"Total channels/groups to monitor: {len(self.active_channels)}")
         return self.active_channels
     
+    def _is_password_file(self, filename: str) -> bool:
+        """Check if filename is a password file (case-insensitive)"""
+        basename = os.path.basename(filename).lower()
+        password_files = ['passwords.txt', 'password.txt', 'pass.txt', 'pwd.txt', 'logins.txt']
+        return basename in password_files
+    
+    def _is_brutelogs_archive(self, filename: str, file_list: list) -> bool:
+        """Check if archive appears to be BruteLogs based on filename or contents"""
+        lower = filename.lower()
+        # Check filename
+        if 'brute' in lower or 'brutelogs' in lower or '[tg]' in lower:
+            return True
+        # Check if any file path contains brutelogs marker
+        for f in file_list:
+            if 'brute' in f.lower() or 'brutelogs' in f.lower():
+                return True
+        return False
+    
+    def _generate_brutelogs_title(self, content: str, archive_name: str, inner_path: str) -> str:
+        """Generate meaningful title for BruteLogs password files"""
+        # Try to extract meaningful info from path and content
+        parts = ["[TG] Stealer Logs"]
+        
+        # Count credentials for title
+        email_pass_count = len(re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@:]{4,}', content))
+        ulp_count = len(re.findall(r'https?://[^\s]+[\s\t|:]+[^\s@]+[\s\t|:]+[^\s]{4,}', content))
+        line_count = len(content.strip().split('\n'))
+        
+        # Detect services mentioned
+        services = []
+        lower = content.lower()
+        service_map = {
+            'twitter': 'Twitter', 'facebook': 'Facebook', 'instagram': 'Instagram',
+            'gmail': 'Gmail', 'outlook': 'Outlook', 'yahoo': 'Yahoo',
+            'netflix': 'Netflix', 'spotify': 'Spotify', 'steam': 'Steam',
+            'paypal': 'PayPal', 'amazon': 'Amazon', 'discord': 'Discord',
+            'tiktok': 'TikTok', 'linkedin': 'LinkedIn', 'github': 'GitHub',
+        }
+        for kw, name in service_map.items():
+            if kw in lower and name not in services:
+                services.append(name)
+                if len(services) >= 3:
+                    break
+        
+        if services:
+            parts.append(" / ".join(services))
+        
+        # Add credential count
+        if email_pass_count > 0:
+            parts.append(f"{email_pass_count} Email:Pass")
+        elif ulp_count > 0:
+            parts.append(f"{ulp_count} URL:Login:Pass")
+        elif line_count > 10:
+            parts.append(f"{line_count} entries")
+        
+        return " - ".join(parts)[:100]
+    
     async def extract_text_from_archive(self, buffer: io.BytesIO, filename: str, channel_name: str) -> int:
         """
         Extract text files from a zip/rar archive and post them.
+        For BruteLogs archives, ONLY extract password files (passwords.txt, etc.)
         Returns number of files processed.
         """
         processed = 0
@@ -581,28 +639,49 @@ class TelegramScraper:
             if lower_filename.endswith('.zip'):
                 buffer.seek(0)
                 with zipfile.ZipFile(buffer, 'r') as zf:
+                    # Get file list to check if this is BruteLogs
+                    all_files = [info.filename for info in zf.infolist()]
+                    is_brutelogs = self._is_brutelogs_archive(filename, all_files)
+                    
+                    # Find password files if BruteLogs
+                    password_files = [f for f in all_files if self._is_password_file(f)] if is_brutelogs else []
+                    
                     for info in zf.infolist():
                         # Skip directories and large files
                         if info.is_dir() or info.file_size > MAX_FILE_SIZE:
                             continue
                         
-                        # Only extract text-like files
                         inner_name = info.filename.lower()
-                        if any(inner_name.endswith(ext) for ext in CRED_FILE_EXTENSIONS):
+                        
+                        # For BruteLogs: ONLY process password files
+                        if is_brutelogs:
+                            if not self._is_password_file(info.filename):
+                                continue
+                            logger.info(f"    🔑 Found password file: {info.filename}")
+                        else:
+                            # Regular archive: only extract text-like files
+                            if not any(inner_name.endswith(ext) for ext in CRED_FILE_EXTENSIONS):
+                                continue
+                        
+                        try:
+                            data = zf.read(info.filename)
                             try:
-                                data = zf.read(info.filename)
-                                try:
-                                    content = data.decode('utf-8', errors='ignore')
-                                except:
-                                    content = data.decode('latin-1', errors='ignore')
-                                
-                                if is_leak_content(content) or len(content) > 100:
+                                content = data.decode('utf-8', errors='ignore')
+                            except:
+                                content = data.decode('latin-1', errors='ignore')
+                            
+                            if is_leak_content(content) or len(content) > 100:
+                                # Generate title based on archive type
+                                if is_brutelogs:
+                                    title = self._generate_brutelogs_title(content, filename, info.filename)
+                                else:
                                     title = generate_auto_title(content, f"{channel_name}/{filename}")
-                                    await self.post_queue.put((content, title))
-                                    processed += 1
-                                    logger.info(f"    📄 Extracted: {info.filename}")
-                            except Exception as e:
-                                logger.debug(f"    Error extracting {info.filename}: {e}")
+                                
+                                await self.post_queue.put((content, title))
+                                processed += 1
+                                logger.info(f"    📄 Extracted: {info.filename}")
+                        except Exception as e:
+                            logger.debug(f"    Error extracting {info.filename}: {e}")
             
             elif lower_filename.endswith('.rar') and HAS_RARFILE:
                 # Write to temp file for rarfile (it needs a file path)
@@ -618,27 +697,46 @@ class TelegramScraper:
                     buffer.truncate(0)
                     
                     with rarfile.RarFile(tmp_path, 'r') as rf:
+                        # Get file list to check if this is BruteLogs
+                        all_files = [info.filename for info in rf.infolist()]
+                        is_brutelogs = self._is_brutelogs_archive(filename, all_files)
+                        
                         for info in rf.infolist():
                             # Skip directories and large files
                             if info.is_dir() or info.file_size > MAX_FILE_SIZE:
                                 continue
                             
                             inner_name = info.filename.lower()
-                            if any(inner_name.endswith(ext) for ext in CRED_FILE_EXTENSIONS):
+                            
+                            # For BruteLogs: ONLY process password files
+                            if is_brutelogs:
+                                if not self._is_password_file(info.filename):
+                                    continue
+                                logger.info(f"    🔑 Found password file: {info.filename}")
+                            else:
+                                # Regular archive: only extract text-like files
+                                if not any(inner_name.endswith(ext) for ext in CRED_FILE_EXTENSIONS):
+                                    continue
+                            
+                            try:
+                                data = rf.read(info.filename)
                                 try:
-                                    data = rf.read(info.filename)
-                                    try:
-                                        content = data.decode('utf-8', errors='ignore')
-                                    except:
-                                        content = data.decode('latin-1', errors='ignore')
-                                    
-                                    if is_leak_content(content) or len(content) > 100:
+                                    content = data.decode('utf-8', errors='ignore')
+                                except:
+                                    content = data.decode('latin-1', errors='ignore')
+                                
+                                if is_leak_content(content) or len(content) > 100:
+                                    # Generate title based on archive type
+                                    if is_brutelogs:
+                                        title = self._generate_brutelogs_title(content, filename, info.filename)
+                                    else:
                                         title = generate_auto_title(content, f"{channel_name}/{filename}")
-                                        await self.post_queue.put((content, title))
-                                        processed += 1
-                                        logger.info(f"    📄 Extracted: {info.filename}")
-                                except Exception as e:
-                                    logger.debug(f"    Error extracting {info.filename}: {e}")
+                                    
+                                    await self.post_queue.put((content, title))
+                                    processed += 1
+                                    logger.info(f"    📄 Extracted: {info.filename}")
+                            except Exception as e:
+                                logger.debug(f"    Error extracting {info.filename}: {e}")
                 finally:
                     # Always clean up temp file
                     if tmp_path and os.path.exists(tmp_path):
