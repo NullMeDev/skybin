@@ -54,7 +54,7 @@
                 <button class="filter-btn" data-filter="pastebin">Pastebin</button>
                 <button class="filter-btn" data-filter="gists">Gists</button>
                 <button class="filter-btn" data-filter="ideone">Ideone</button>
-                <button class="filter-btn" data-filter="psbdmp">psbdmp</button>
+                <button class="filter-btn" data-filter="telegram">Telegram</button>
             </div>
 
             <div id="paste-container">
@@ -132,9 +132,14 @@
             }
         }
 
+        let isInitialLoad = true;
+        
         async function loadPastes() {
             const container = document.getElementById('paste-container');
-            container.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pastes...</div>';
+            // Only show loading spinner on initial load, not refreshes
+            if (isInitialLoad) {
+                container.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pastes...</div>';
+            }
 
             try {
                 let url = `${API_BASE}/pastes?limit=${LIMIT}&offset=${currentPage * LIMIT}`;
@@ -178,6 +183,7 @@
                 `).join('');
 
                 container.innerHTML = `<div class="paste-list">${html}</div>`;
+                isInitialLoad = false;
                 
                 // Show pagination
                 const pagination = document.getElementById('pagination');
@@ -231,7 +237,6 @@
             { name: 'hastebin', label: 'Hastebin' },
             { name: 'slexy', label: 'Slexy' },
             { name: 'ubuntu_pastebin', label: 'Ubuntu Pastebin' },
-            { name: 'ixio', label: 'ix.io' },
             { name: 'justpaste', label: 'JustPaste' },
             { name: 'controlc', label: 'ControlC' },
             { name: 'pastecode', label: 'Pastecode' },
@@ -246,7 +251,9 @@
             { name: 'pastebin_pl', label: 'Pastebin.pl' },
             { name: 'quickpaste', label: 'Quickpaste' },
             { name: 'ghostbin', label: 'Ghostbin' },
-            { name: 'psbdmp', label: 'psbdmp.ws' },
+            { name: 'pastesio', label: 'pastes.io' },
+            { name: 'bpast', label: 'bpa.st' },
+            { name: 'telegram', label: 'Telegram' },
         ];
         let sourcesStatus = {};
 
