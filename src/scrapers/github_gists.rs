@@ -109,7 +109,7 @@ impl Scraper for GitHubGistsScraper {
 
         let mut pastes = Vec::new();
 
-        for gist in gists {
+        for gist in gists.iter().take(15) {
             // Only process public gists
             if !gist.public {
                 continue;
@@ -117,19 +117,36 @@ impl Scraper for GitHubGistsScraper {
 
             // Get the first file (gists can have multiple files, we take primary one)
             if let Some((filename, file)) = gist.files.iter().next() {
-                // Skip empty files
-                if file.content.is_empty() {
+                // Fetch raw content from raw_url (list API doesn't include content)
+                let content = if !file.content.is_empty() {
+                    file.content.clone()
+                } else {
+                    // Fetch from raw URL
+                    match client
+                        .get(&file.raw_url)
+                        .header("User-Agent", "SkyBin-Gist-Scraper/1.0")
+                        .send()
+                        .await
+                    {
+                        Ok(resp) if resp.status().is_success() => {
+                            resp.text().await.unwrap_or_default()
+                        }
+                        _ => continue,
+                    }
+                };
+
+                // Skip empty content
+                if content.is_empty() {
                     continue;
                 }
 
-                let paste = DiscoveredPaste::new("gists", &gist.id, file.content.clone())
+                let paste = DiscoveredPaste::new("gists", &gist.id, content)
                     .with_title(
                         gist.description
+                            .clone()
                             .unwrap_or_else(|| format!("Gist: {}", filename)),
                     )
-                    // Note: author is not set here - it will be None before storage
-                    // This is intentional per anonymization requirements
-                    .with_url(gist.url)
+                    .with_url(gist.url.clone())
                     .with_syntax(file.language.clone().unwrap_or_else(|| "text".to_string()))
                     .with_created_at(
                         chrono::DateTime::parse_from_rfc3339(&gist.created_at)
@@ -138,6 +155,9 @@ impl Scraper for GitHubGistsScraper {
                     );
 
                 pastes.push(paste);
+                
+                // Small delay to be nice to GitHub API
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
         }
 
