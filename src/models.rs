@@ -14,6 +14,9 @@ pub struct Paste {
     pub syntax: String,
     pub matched_patterns: Option<Vec<PatternMatch>>,
     pub is_sensitive: bool,
+    /// High-value alert: contains critical severity patterns (private keys, AWS keys, etc.)
+    #[serde(default)]
+    pub high_value: bool,
     pub created_at: i64,
     pub expires_at: i64,
     pub view_count: i64,
@@ -91,6 +94,8 @@ pub struct SearchFilters {
     pub source: Option<String>,
     pub is_sensitive: Option<bool>,
     pub interesting: Option<bool>,
+    /// Filter for high-value alerts (critical severity patterns)
+    pub high_value: Option<bool>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
 }

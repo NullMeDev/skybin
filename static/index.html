@@ -49,10 +49,11 @@
 
             <div class="filters">
                 <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="alerts" style="background: linear-gradient(135deg, #dc2626, #991b1b); color: white;">🚨 Alerts</button>
                 <button class="filter-btn" data-filter="interesting" style="background: linear-gradient(135deg, #f39c12, #e74c3c);">🔥 Interesting</button>
                 <button class="filter-btn" data-filter="sensitive">Sensitive Only</button>
                 <button class="filter-btn" data-filter="pastebin">Pastebin</button>
-                <button class="filter-btn" data-filter="gists">Gists</button>
+                <button class="filter-btn" data-filter="github">GitHub</button>
                 <button class="filter-btn" data-filter="ideone">Ideone</button>
                 <button class="filter-btn" data-filter="telegram">Telegram</button>
             </div>
@@ -144,7 +145,9 @@
             try {
                 let url = `${API_BASE}/pastes?limit=${LIMIT}&offset=${currentPage * LIMIT}`;
                 
-                if (currentFilter === 'sensitive') {
+                if (currentFilter === 'alerts') {
+                    url += '&high_value=true';
+                } else if (currentFilter === 'sensitive') {
                     url += '&sensitive=true';
                 } else if (currentFilter === 'interesting') {
                     url += '&interesting=true';
@@ -167,7 +170,7 @@
                 }
 
                 const html = data.data.map(paste => `
-                    <a href="/paste/${paste.id}" class="paste-item">
+                    <a href="/paste/${paste.id}" class="paste-item${paste.high_value ? ' high-value-item' : ''}">
                         <div class="paste-info">
                             <div class="paste-title">${escapeHtml(paste.title || 'Untitled')}</div>
                             <div class="paste-meta">
@@ -175,7 +178,8 @@
                             </div>
                         </div>
                         <div class="paste-badges">
-                            ${paste.is_sensitive ? '<span class="badge badge-sensitive">Sensitive</span>' : ''}
+                            ${paste.high_value ? '<span class="badge badge-critical">🚨 CRITICAL</span>' : ''}
+                            ${paste.is_sensitive && !paste.high_value ? '<span class="badge badge-sensitive">Sensitive</span>' : ''}
                             <span class="badge badge-source">${paste.source}</span>
                         </div>
                         <div class="paste-time">${formatTime(paste.created_at)}</div>

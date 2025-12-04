@@ -672,17 +672,22 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
     /// Helper function to convert a database row to a Paste struct
     fn row_to_paste(row: &Row) -> rusqlite::Result<Paste> {
         let matched_patterns_str: Option<String> = row.get(9)?;
-        let matched_patterns = if let Some(s) = matched_patterns_str {
+        let matched_patterns: Option<Vec<crate::models::PatternMatch>> = if let Some(s) = &matched_patterns_str {
             if s.is_empty() {
                 None
             } else {
-                serde_json::from_str(&s).ok()
+                serde_json::from_str(s).ok()
             }
         } else {
             None
         };
 
         let is_sensitive: i32 = row.get(10)?;
+        
+        // Compute high_value: true if any matched pattern has "critical" severity
+        let high_value = matched_patterns.as_ref().map_or(false, |patterns| {
+            patterns.iter().any(|p| p.severity == "critical")
+        });
 
         Ok(Paste {
             id: row.get(0)?,
@@ -696,10 +701,29 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
             syntax: row.get(8)?,
             matched_patterns,
             is_sensitive: is_sensitive != 0,
+            high_value,
             created_at: row.get(11)?,
             expires_at: row.get(12)?,
             view_count: row.get(13)?,
         })
+    }
+
+    /// Get high-value pastes (critical severity patterns: private keys, AWS keys, etc.)
+    pub fn get_high_value_pastes(&self, limit: usize, offset: usize) -> Result<Vec<Paste>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, source, source_id, title, author, content, content_hash, url, 
+             syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+             FROM pastes 
+             WHERE matched_patterns IS NOT NULL
+             AND matched_patterns LIKE '%\"critical\"%'
+             ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        )?;
+
+        let pastes = stmt
+            .query_map(params![limit, offset], Self::row_to_paste)?
+            .collect::<SqlResult<Vec<_>>>()?;
+
+        Ok(pastes)
     }
 }
 
@@ -724,6 +748,7 @@ mod tests {
             syntax: "plaintext".to_string(),
             matched_patterns: None,
             is_sensitive: false,
+            high_value: false,
             created_at: now,
             expires_at: now + (7 * 24 * 60 * 60),
             view_count: 0,

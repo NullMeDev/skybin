@@ -167,11 +167,12 @@
                         <div class="paste-detail-header">
                             <div>
                                 <h1 class="paste-detail-title">${escapeHtml(paste.title || 'Untitled')}</h1>
-                                <div class="paste-detail-meta">
+                            <div class="paste-detail-meta">
                                     <span>Source: ${paste.source}</span>
                                     <span>Syntax: ${paste.syntax || 'plaintext'}</span>
                                     <span>Created: ${formatDate(paste.created_at)}</span>
-                                    ${paste.is_sensitive ? '<span class="badge badge-sensitive">Sensitive</span>' : ''}
+                                    ${paste.high_value ? '<span class="badge badge-critical">🚨 CRITICAL</span>' : ''}
+                                    ${paste.is_sensitive && !paste.high_value ? '<span class="badge badge-sensitive">Sensitive</span>' : ''}
                                 </div>
                             </div>
                             <div class="paste-detail-actions">

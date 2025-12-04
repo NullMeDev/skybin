@@ -17,6 +17,7 @@ pub struct PasteListItem {
     pub syntax: String,
     pub created_at: i64,
     pub is_sensitive: bool,
+    pub high_value: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -28,6 +29,7 @@ pub struct PasteDetail {
     pub content: String,
     pub created_at: i64,
     pub is_sensitive: bool,
+    pub high_value: bool,
     pub matched_patterns: Vec<PatternMatch>,
     pub view_count: i64,
 }
@@ -128,7 +130,11 @@ pub async fn get_pastes(
     let limit = filters.limit.unwrap_or(50).min(100) as usize;
     let offset = filters.offset.unwrap_or(0) as usize;
     
-    let pastes = if filters.interesting.unwrap_or(false) {
+    let pastes = if filters.high_value.unwrap_or(false) {
+        // High-value alerts: critical severity patterns (AWS keys, private keys, etc.)
+        db.get_high_value_pastes(limit, offset)
+            .map_err(|e| ApiError(format!("Failed to fetch high-value pastes: {}", e)))?
+    } else if filters.interesting.unwrap_or(false) {
         db.get_interesting_pastes(limit, offset)
             .map_err(|e| ApiError(format!("Failed to fetch interesting pastes: {}", e)))?
     } else if filters.source.is_some() || filters.is_sensitive.is_some() {
@@ -148,6 +154,7 @@ pub async fn get_pastes(
             syntax: p.syntax,
             created_at: p.created_at,
             is_sensitive: p.is_sensitive,
+            high_value: p.high_value,
         })
         .collect();
 
@@ -184,6 +191,7 @@ pub async fn get_paste_api(
         content: paste.content,
         created_at: paste.created_at,
         is_sensitive: paste.is_sensitive,
+        high_value: paste.high_value,
         matched_patterns: patterns,
         view_count: paste.view_count,
     };
@@ -271,6 +279,7 @@ pub async fn upload_paste_json(
         syntax: detected_lang,
         matched_patterns: None,
         is_sensitive: false,
+        high_value: false,  // User uploads don't get auto-flagged
         created_at: now,
         expires_at: now + (7 * 24 * 60 * 60), // 7-day TTL
         view_count: 0,
@@ -313,6 +322,7 @@ pub async fn search_api(
             syntax: p.syntax,
             created_at: p.created_at,
             is_sensitive: p.is_sensitive,
+            high_value: p.high_value,
         })
         .collect();
 

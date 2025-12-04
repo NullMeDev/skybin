@@ -59,6 +59,9 @@ impl Scheduler {
         // Detect patterns
         let patterns = self.detector.detect(&discovered.content);
         let is_sensitive = self.detector.is_sensitive(&discovered.content);
+        
+        // High-value alert: flag if any pattern has critical severity
+        let high_value = patterns.iter().any(|p| p.severity == "critical");
 
         // Auto-generate title if missing or "Untitled"
         let title = match &discovered.title {
@@ -84,6 +87,7 @@ impl Scheduler {
                 Some(patterns)
             },
             is_sensitive,
+            high_value,
             created_at: now,
             expires_at: now + (7 * 24 * 60 * 60), // 7-day TTL
             view_count: 0,
