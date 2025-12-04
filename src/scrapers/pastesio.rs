@@ -1,38 +1,16 @@
 use super::traits::{Scraper, ScraperError, ScraperResult};
 use crate::models::DiscoveredPaste;
 use async_trait::async_trait;
-use serde::Deserialize;
 
-/// pastesio.com scraper - modern Pastebin alternative with public API
-/// API docs indicate they have a public pastes endpoint
+/// pastes.io scraper - modern Pastebin alternative (was pastesio.com)
 pub struct PastesioScraper {
     base_url: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct PastesioResponse {
-    #[serde(default)]
-    data: Vec<PastesioItem>,
-}
-
-#[derive(Debug, Deserialize)]
-struct PastesioItem {
-    #[serde(default)]
-    id: String,
-    #[serde(default)]
-    title: String,
-    #[serde(default)]
-    content: String,
-    #[serde(default)]
-    syntax: String,
-    #[serde(default)]
-    created_at: String,
 }
 
 impl PastesioScraper {
     pub fn new() -> Self {
         PastesioScraper {
-            base_url: "https://pastesio.com".to_string(),
+            base_url: "https://pastes.io".to_string(),
         }
     }
 }
@@ -65,7 +43,7 @@ impl Scraper for PastesioScraper {
             Ok(r) => r,
             Err(e) => {
                 return Err(ScraperError::SourceUnavailable(format!(
-                    "pastesio.com connection failed: {}",
+                    "pastes.io connection failed: {}",
                     e
                 )));
             }
@@ -73,7 +51,7 @@ impl Scraper for PastesioScraper {
 
         if !response.status().is_success() {
             return Err(ScraperError::SourceUnavailable(format!(
-                "pastesio.com returned {}",
+                "pastes.io returned {}",
                 response.status()
             )));
         }
