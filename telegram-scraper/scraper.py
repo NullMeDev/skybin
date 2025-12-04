@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
 """
-SkyBin Telegram Scraper Service v2.0
+SkyBin Telegram Scraper Service v2.1
 - Auto-discovers leak channels from your dialogs
 - Joins known active channels
 - Monitors all channels/groups you're in
+- Downloads and processes .txt/.csv/.json files
+- Filters out Stripe checkout links and payment content
+- Auto-generates titles based on content analysis
 - Posts found leaks incrementally to SkyBin API
 """
 
 import asyncio
 import re
 import os
+import io
 import json
 import logging
 import aiohttp
+import tempfile
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from telethon import TelegramClient, events, functions
-from telethon.tl.types import Channel, Chat, User, InputPeerChannel
+from telethon.tl.types import Channel, Chat, User, InputPeerChannel, DocumentAttributeFilename
 from telethon.tl.functions.channels import JoinChannelRequest
 from telethon.tl.functions.messages import ImportChatInviteRequest
 from telethon.errors import (
@@ -91,23 +96,23 @@ KNOWN_CHANNELS = [
     'oXn6deop_VVhOWIy',         # Moon Cloud ULP/Combo
 ]
 
-# Credential detection patterns - EXPANDED
+# Credential detection patterns - FOCUSED on actual leaks
+# Excludes: Stripe checkout links, payment processing tokens
 CREDENTIAL_PATTERNS = [
-    # API keys and tokens
-    re.compile(r'(?i)(api[_-]?key|apikey)\s*[=:]\s*[\'"]?[a-zA-Z0-9_-]{16,}'),
-    re.compile(r'(?i)(secret[_-]?key|secretkey)\s*[=:]\s*[\'"]?[a-zA-Z0-9_-]{16,}'),
-    re.compile(r'(?i)(access[_-]?token|accesstoken)\s*[=:]\s*[\'"]?[a-zA-Z0-9_-]{16,}'),
-    re.compile(r'(?i)(auth[_-]?token|bearer)\s*[=:]\s*[\'"]?[a-zA-Z0-9_-]{16,}'),
-    re.compile(r'(?i)(password|passwd|pwd)\s*[=:]\s*[\'"]?[^\s\'"]{6,}'),
+    # Username:password and email:password combos (PRIMARY)
+    re.compile(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@:]{4,}'),  # email:pass
+    re.compile(r'(?i)(?:user(?:name)?|login)\s*[=:]\s*[^\s]{3,}\s+(?:pass(?:word)?|pwd)\s*[=:]\s*[^\s]{4,}'),  # user:pass format
+    re.compile(r'\b[a-zA-Z0-9_.+-]+:[^\s@:]{6,}(?:\s|$)'),  # username:password
     
-    # Platform-specific tokens
+    # URL:login:pass (stealer logs)
+    re.compile(r'https?://[^\s]+[\s\t|:]+[^\s@]+[\s\t|:]+[^\s]{4,}'),
+    
+    # API keys (excluding Stripe)
     re.compile(r'ghp_[a-zA-Z0-9]{36}'),  # GitHub PAT
     re.compile(r'gho_[a-zA-Z0-9]{36}'),  # GitHub OAuth
     re.compile(r'github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}'),  # GitHub Fine-grained
-    re.compile(r'sk-[a-zA-Z0-9]{48}'),  # OpenAI
+    re.compile(r'sk-[a-zA-Z0-9]{48}'),  # OpenAI (not sk_live/sk_test)
     re.compile(r'sk-proj-[a-zA-Z0-9-_]{80,}'),  # OpenAI Project
-    re.compile(r'sk_live_[a-zA-Z0-9]{24,}'),  # Stripe Live
-    re.compile(r'sk_test_[a-zA-Z0-9]{24,}'),  # Stripe Test
     re.compile(r'AKIA[0-9A-Z]{16}'),  # AWS Access Key
     
     # Database connection strings
@@ -119,63 +124,114 @@ CREDENTIAL_PATTERNS = [
     # Private keys
     re.compile(r'-----BEGIN (RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY-----'),
     
-    # Email:password combos
-    re.compile(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@]{4,}'),
-    
     # Communication platform tokens
     re.compile(r'xox[baprs]-[0-9]{10,}-[a-zA-Z0-9-]+'),  # Slack
     re.compile(r'[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}'),  # Discord bot
     re.compile(r'[0-9]{17,19}:[A-Za-z0-9_-]{35}'),  # Telegram bot
     
-    # Other services
+    # Other services (non-payment)
     re.compile(r'SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}'),  # SendGrid
     re.compile(r'AIza[0-9A-Za-z_-]{35}'),  # Firebase/Google
-    re.compile(r'eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*'),  # JWT
+]
+
+# Patterns to EXCLUDE (Stripe checkout, payment processors)
+EXCLUDE_PATTERNS = [
+    re.compile(r'(?i)checkout\.stripe\.com'),
+    re.compile(r'(?i)buy\.stripe\.com'),
+    re.compile(r'(?i)stripe\.com/links'),
+    re.compile(r'sk_live_[a-zA-Z0-9]{24,}'),  # Stripe Live key
+    re.compile(r'sk_test_[a-zA-Z0-9]{24,}'),  # Stripe Test key
+    re.compile(r'pk_live_[a-zA-Z0-9]{24,}'),  # Stripe Publishable key
+    re.compile(r'pk_test_[a-zA-Z0-9]{24,}'),  # Stripe Publishable test key
+    re.compile(r'(?i)price_[a-zA-Z0-9]{24,}'),  # Stripe Price ID
+    re.compile(r'(?i)prod_[a-zA-Z0-9]{14,}'),  # Stripe Product ID
+    re.compile(r'(?i)cs_live_[a-zA-Z0-9]+'),  # Checkout session
+    re.compile(r'(?i)cs_test_[a-zA-Z0-9]+'),  # Test checkout session
 ]
 
 # Minimum counts for credential detection
 MIN_EMAIL_PASS_COMBOS = 1  # Accept even single email:pass
 MIN_CREDENTIAL_PATTERNS = 1  # Accept single API key/token
 
-# File extensions that indicate credential files
-CRED_FILE_EXTENSIONS = ['.txt', '.csv', '.json', '.sql', '.db', '.log', '.env']
+# File extensions that indicate credential files (downloadable)
+CRED_FILE_EXTENSIONS = ['.txt', '.csv', '.json', '.sql', '.log', '.env']
+
+# Max file size to download (5MB to avoid clogging VPS)
+MAX_FILE_SIZE = 5 * 1024 * 1024
+
+# Concurrent file downloads limit
+MAX_CONCURRENT_DOWNLOADS = 2
+
+def should_exclude(text: str) -> bool:
+    """Check if text should be excluded (Stripe checkout links, etc.)"""
+    if not text:
+        return False
+    return any(pattern.search(text) for pattern in EXCLUDE_PATTERNS)
 
 def contains_credentials(text: str) -> bool:
-    """Check if text contains potential credentials"""
+    """Check if text contains potential credentials (excluding payment stuff)"""
     if not text:
+        return False
+    if should_exclude(text):
         return False
     return any(pattern.search(text) for pattern in CREDENTIAL_PATTERNS)
 
-# Leak-related keywords for additional filtering
+# Leak-related keywords for additional filtering (focused on credential leaks)
 LEAK_KEYWORDS = [
+    # Core credential terms
     'leak', 'leaked', 'dump', 'dumped', 'combo', 'combolist', 'breach', 'breached',
     'crack', 'cracked', 'hacked', 'stolen', 'exposed', 'database', 'db dump',
-    'credential', 'password', 'passwd', 'login', 'account', 'config', 'log',
+    'credential', 'password', 'passwd', 'login', 'account',
+    # Stealer/log references
     'stealer', 'infostealer', 'redline', 'raccoon', 'lumma', 'vidar', 'stealc',
+    'log', 'logs', 'fresh logs', 'cloud logs',
+    # Credential formats
+    'email:pass', 'user:pass', 'mail:pass', 'url:login:pass', 'ulp',
+    # BIN/Card related (user requested)
+    'bin', 'bins', 'binning', 'fullz', 'cc', 'cvv',
+    # Service accounts
     'netflix', 'spotify', 'disney', 'hbo', 'amazon', 'prime', 'vpn', 'nord',
     'express', 'steam', 'fortnite', 'minecraft', 'roblox', 'epic', 'origin',
-    'paypal', 'stripe', 'venmo', 'cashapp', 'crypto', 'bitcoin', 'wallet',
     'gmail', 'yahoo', 'outlook', 'hotmail', 'proton', 'mail.ru',
-    'api key', 'apikey', 'token', 'secret', 'private key', 'ssh', 'ftp', 'smtp',
-    'cpanel', 'rdp', 'shell', 'root', 'admin', 'panel', 'backdoor',
+    # Technical credentials
+    'api key', 'apikey', 'secret', 'private key', 'ssh', 'ftp', 'smtp',
+    'cpanel', 'rdp', 'shell', 'root', 'admin', 'panel',
+    # Quality indicators
     'fresh', 'valid', 'checked', 'hits', 'capture', 'working', 'premium',
-    'email:pass', 'user:pass', 'mail:pass', 'url:login:pass', 'ulp', 'combo',
-    'bin', 'fullz', 'cc', 'cvv', 'ssn', 'dob', 'credit card',
+]
+
+# Keywords that indicate we should SKIP the message
+SKIP_KEYWORDS = [
+    'checkout.stripe.com', 'buy.stripe.com', 'stripe.com/links',
+    'payment link', 'pay now', 'subscribe now', 'buy now',
+    'donation', 'donate', 'tip jar', 'ko-fi', 'patreon',
 ]
 
 def is_leak_content(text: str) -> bool:
     """
     Credential detection - requires actual credentials OR strong keyword signals.
-    Lowered thresholds to catch single leaks.
+    Excludes Stripe checkout links and payment-related content.
     """
-    if not text or len(text) < 50:  # Lower threshold
+    if not text or len(text) < 50:
         return False
     
     lower = text.lower()
     
+    # SKIP if contains payment/checkout keywords
+    if any(skip_kw in lower for skip_kw in SKIP_KEYWORDS):
+        return False
+    
+    # SKIP if matches exclude patterns (Stripe links, etc.)
+    if should_exclude(text):
+        return False
+    
     # Count email:password combinations
-    email_pass_pattern = re.compile(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s]{4,}')
+    email_pass_pattern = re.compile(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@:]{4,}')
     email_pass_count = len(email_pass_pattern.findall(text))
+    
+    # Count username:password combos (non-email)
+    user_pass_pattern = re.compile(r'\b[a-zA-Z0-9_.-]{3,}:[^\s@:]{6,}(?:\s|$)')
+    user_pass_count = len(user_pass_pattern.findall(text))
     
     # Count URL:login:pass format (stealer logs)
     ulp_pattern = re.compile(r'https?://[^\s]+[\s\t|:]+[^\s@]+[\s\t|:]+[^\s]{4,}')
@@ -187,22 +243,85 @@ def is_leak_content(text: str) -> bool:
     # Check for private keys
     has_private_key = '-----BEGIN' in text and 'PRIVATE KEY-----' in text
     
-    # Check for keywords
+    # Check for leak keywords
     keyword_count = sum(1 for kw in LEAK_KEYWORDS if kw in lower)
+    
+    # Check specifically for bin/bins/binning content (user requested)
+    has_bin_content = any(kw in lower for kw in ['bin', 'bins', 'binning', 'fullz', 'cvv'])
     
     # Accept if:
     # 1. Any email:pass combo
-    # 2. Any ULP format entry
-    # 3. Any credential pattern (API key, token, etc)
-    # 4. Private key
-    # 5. 3+ leak keywords (suggests leak content even without parsed creds)
+    # 2. Any username:pass combo
+    # 3. Any ULP format entry
+    # 4. Any credential pattern (API key, token, etc)
+    # 5. Private key
+    # 6. Has bin/card content
+    # 7. 3+ leak keywords (suggests leak content)
     return (
         email_pass_count >= MIN_EMAIL_PASS_COMBOS or
+        user_pass_count >= 1 or
         ulp_count >= 1 or
         cred_pattern_count >= MIN_CREDENTIAL_PATTERNS or
         has_private_key or
+        has_bin_content or
         keyword_count >= 3
     )
+
+def generate_auto_title(content: str, channel_name: str = "Telegram") -> str:
+    """
+    Generate a title based on content analysis.
+    Detects services, credential types, and formats.
+    """
+    lower = content.lower()
+    detected = []
+    
+    # Detect services
+    service_keywords = {
+        'netflix': 'Netflix', 'spotify': 'Spotify', 'disney': 'Disney+',
+        'hbo': 'HBO', 'amazon': 'Amazon', 'prime': 'Prime', 'steam': 'Steam',
+        'fortnite': 'Fortnite', 'minecraft': 'Minecraft', 'roblox': 'Roblox',
+        'gmail': 'Gmail', 'yahoo': 'Yahoo', 'outlook': 'Outlook',
+        'paypal': 'PayPal', 'crypto': 'Crypto', 'nordvpn': 'NordVPN',
+        'expressvpn': 'ExpressVPN', 'cpanel': 'cPanel', 'rdp': 'RDP',
+        'github': 'GitHub', 'aws': 'AWS', 'mongodb': 'MongoDB',
+    }
+    
+    for keyword, name in service_keywords.items():
+        if keyword in lower:
+            detected.append(name)
+            if len(detected) >= 2:
+                break
+    
+    # Detect format
+    format_type = None
+    if re.search(r'https?://[^\s]+[\s\t|:]+[^\s@]+[\s\t|:]+[^\s]{4,}', content):
+        format_type = "URL:Login:Pass"
+    elif re.search(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@:]{4,}', content):
+        format_type = "Email:Pass"
+    elif re.search(r'\b[a-zA-Z0-9_.+-]+:[^\s@:]{6,}', content):
+        format_type = "User:Pass"
+    elif any(kw in lower for kw in ['bin', 'bins', 'fullz', 'cvv']):
+        format_type = "BINs"
+    
+    # Count credentials
+    email_pass_count = len(re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@:]{4,}', content))
+    line_count = len(content.split('\n'))
+    
+    # Build title
+    parts = [f"[TG] {channel_name}"]
+    
+    if detected:
+        parts.append(" | ".join(detected[:2]))
+    
+    if format_type:
+        parts.append(format_type)
+    
+    if email_pass_count > 10:
+        parts.append(f"{email_pass_count} combos")
+    elif line_count > 100:
+        parts.append(f"{line_count} lines")
+    
+    return " - ".join(parts)[:100]
 
 async def post_to_skybin(content: str, title: str, source: str = "telegram"):
     """Post discovered content to SkyBin API"""
@@ -240,10 +359,14 @@ class TelegramScraper:
     def __init__(self):
         self.client = None
         self.processed_messages = set()
+        self.processed_files = set()  # Track downloaded files by unique ID
         self.active_channels = []
         self.post_queue = asyncio.Queue()
+        self.file_queue = asyncio.Queue()  # Queue for file downloads
         self.posts_made = 0
+        self.files_downloaded = 0
         self.channels_joined = 0
+        self.download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
         
     async def start(self):
         """Initialize and start the Telegram client"""
@@ -361,39 +484,133 @@ class TelegramScraper:
         logger.info(f"Total channels/groups to monitor: {len(self.active_channels)}")
         return self.active_channels
     
+    async def download_and_process_file(self, message, channel_name: str) -> bool:
+        """
+        Download a file from Telegram and post its contents.
+        Returns True if successfully processed.
+        """
+        if not message.document:
+            return False
+        
+        # Get filename
+        filename = None
+        for attr in message.document.attributes:
+            if isinstance(attr, DocumentAttributeFilename):
+                filename = attr.file_name
+                break
+        
+        if not filename:
+            return False
+        
+        # Check extension
+        if not any(filename.lower().endswith(ext) for ext in CRED_FILE_EXTENSIONS):
+            return False
+        
+        # Check file size
+        file_size = message.document.size
+        if file_size > MAX_FILE_SIZE:
+            logger.info(f"  Skipping large file: {filename} ({file_size / 1024 / 1024:.1f}MB)")
+            return False
+        
+        # Create unique file ID
+        file_id = f"{message.chat_id}_{message.id}_{filename}"
+        if file_id in self.processed_files:
+            return False
+        
+        try:
+            async with self.download_semaphore:
+                logger.info(f"  📥 Downloading: {filename} ({file_size / 1024:.1f}KB)")
+                
+                # Download to memory (BytesIO)
+                buffer = io.BytesIO()
+                await self.client.download_media(message, buffer)
+                buffer.seek(0)
+                
+                # Try to decode as text
+                try:
+                    content = buffer.read().decode('utf-8', errors='ignore')
+                except:
+                    try:
+                        buffer.seek(0)
+                        content = buffer.read().decode('latin-1', errors='ignore')
+                    except:
+                        logger.warning(f"  Could not decode file: {filename}")
+                        return False
+                
+                # Check if content is leak material
+                if not is_leak_content(content) and len(content) < 100:
+                    logger.debug(f"  File doesn't contain leak content: {filename}")
+                    return False
+                
+                # Generate auto-title based on content
+                title = generate_auto_title(content, channel_name)
+                
+                # Add to post queue
+                await self.post_queue.put((content, title))
+                self.processed_files.add(file_id)
+                self.files_downloaded += 1
+                logger.info(f"  ✓ Processed file: {filename}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"  Error downloading {filename}: {e}")
+            return False
+
+    async def file_worker(self):
+        """Worker to process file downloads from queue"""
+        while True:
+            try:
+                message, channel_name = await asyncio.wait_for(self.file_queue.get(), timeout=5.0)
+                await self.download_and_process_file(message, channel_name)
+                # Rate limit file downloads
+                await asyncio.sleep(3)
+            except asyncio.TimeoutError:
+                continue
+            except Exception as e:
+                logger.error(f"File worker error: {e}")
+                await asyncio.sleep(5)
+
     async def scrape_channel(self, channel, limit=100):
         """Scrape recent messages from a channel"""
         name = getattr(channel, 'title', str(channel.id))
         
         try:
             count = 0
+            file_count = 0
             async for message in self.client.iter_messages(channel, limit=limit):
                 if message.id in self.processed_messages:
                     continue
-                    
-                text = message.text or ''
                 
-                # Also check for credential file attachments
-                has_cred_file = False
+                # Check for credential file attachments - queue for download
                 if message.document:
                     try:
-                        filename = getattr(message.document.attributes[0], 'file_name', '') if message.document.attributes else ''
-                        if any(filename.lower().endswith(ext) for ext in CRED_FILE_EXTENSIONS):
-                            has_cred_file = True
-                            text = f"[File: {filename}]\n{text}"
-                    except:
-                        pass
+                        filename = None
+                        for attr in message.document.attributes:
+                            if isinstance(attr, DocumentAttributeFilename):
+                                filename = attr.file_name
+                                break
+                        
+                        if filename and any(filename.lower().endswith(ext) for ext in CRED_FILE_EXTENSIONS):
+                            # Queue file for download
+                            file_id = f"{message.chat_id}_{message.id}_{filename}"
+                            if file_id not in self.processed_files:
+                                await self.file_queue.put((message, name))
+                                file_count += 1
+                                self.processed_messages.add(message.id)
+                                continue  # Don't also process as text
+                    except Exception as e:
+                        logger.debug(f"Error checking file: {e}")
                 
-                if is_leak_content(text) or has_cred_file:
-                    title = f"[TG] {name}: {text[:40]}..."
-                    
-                    # Add to queue for rate-limited posting
+                # Process text content
+                text = message.text or ''
+                if is_leak_content(text):
+                    title = generate_auto_title(text, name)
                     await self.post_queue.put((text, title))
                     self.processed_messages.add(message.id)
                     count += 1
                     
-            if count > 0:
-                logger.info(f"  Found {count} leak messages in {name}")
+            if count > 0 or file_count > 0:
+                logger.info(f"  Found {count} leak messages, {file_count} files in {name}")
                     
         except ChannelPrivateError:
             logger.warning(f"  Cannot access {name} (private)")
@@ -431,29 +648,37 @@ class TelegramScraper:
         # Register handler for new messages in monitored channels
         @self.client.on(events.NewMessage(chats=self.active_channels))
         async def handler(event):
-            text = event.text or ''
-            
-            # Check for credential files
-            has_cred_file = False
-            if event.document:
-                try:
-                    filename = getattr(event.document.attributes[0], 'file_name', '') if event.document.attributes else ''
-                    if any(filename.lower().endswith(ext) for ext in CRED_FILE_EXTENSIONS):
-                        has_cred_file = True
-                        text = f"[File: {filename}]\n{text}"
-                except:
-                    pass
-            
-            if is_leak_content(text) or has_cred_file:
-                try:
-                    chat = await event.get_chat()
-                    chat_name = getattr(chat, 'title', None) or str(chat.id)
-                    title = f"[TG] {chat_name}: {text[:40]}..."
-                    
+            try:
+                chat = await event.get_chat()
+                chat_name = getattr(chat, 'title', None) or str(chat.id)
+                
+                # Check for credential file attachments - queue for download
+                if event.document:
+                    try:
+                        filename = None
+                        for attr in event.document.attributes:
+                            if isinstance(attr, DocumentAttributeFilename):
+                                filename = attr.file_name
+                                break
+                        
+                        if filename and any(filename.lower().endswith(ext) for ext in CRED_FILE_EXTENSIONS):
+                            file_id = f"{event.chat_id}_{event.id}_{filename}"
+                            if file_id not in self.processed_files:
+                                await self.file_queue.put((event.message, chat_name))
+                                logger.info(f"📁 New file from {chat_name}: {filename}")
+                                return  # Don't also process as text
+                    except Exception as e:
+                        logger.debug(f"Error checking file in handler: {e}")
+                
+                # Process text content
+                text = event.text or ''
+                if is_leak_content(text):
+                    title = generate_auto_title(text, chat_name)
                     await self.post_queue.put((text, title))
                     logger.info(f"New leak from {chat_name}")
-                except Exception as e:
-                    logger.error(f"Handler error: {e}")
+                    
+            except Exception as e:
+                logger.error(f"Handler error: {e}")
         
         # Also monitor for when we join new channels
         @self.client.on(events.ChatAction())
@@ -478,8 +703,9 @@ class TelegramScraper:
         if not await self.start():
             return
         
-        # Start the post worker
-        worker_task = asyncio.create_task(self.post_worker())
+        # Start worker tasks
+        post_worker_task = asyncio.create_task(self.post_worker())
+        file_worker_task = asyncio.create_task(self.file_worker())
         
         try:
             # First, try to join known leak channels
@@ -499,17 +725,18 @@ class TelegramScraper:
                 await self.scrape_channel(channel, limit=50)
                 await asyncio.sleep(1)  # Rate limit between channels
             
-            # Wait for queue to empty
-            while not self.post_queue.empty():
+            # Wait for queues to empty
+            while not self.post_queue.empty() or not self.file_queue.empty():
                 await asyncio.sleep(1)
             
-            logger.info(f"Initial scrape complete. Posted {self.posts_made} items.")
+            logger.info(f"Initial scrape complete. Posted {self.posts_made} items, downloaded {self.files_downloaded} files.")
             
             # Then monitor in real-time
             await self.monitor_realtime()
             
         finally:
-            worker_task.cancel()
+            post_worker_task.cancel()
+            file_worker_task.cancel()
         
     async def stop(self):
         """Stop the client"""
