@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-SkyBin Telegram Scraper Service v2.2
+SkyBin Telegram Scraper Service v2.3
 - Auto-discovers leak channels from your dialogs
 - Joins known active channels
 - Monitors all channels/groups you're in
 - Downloads .txt/.csv/.json/.sql/.log/.env files
-- Extracts text from .zip and .rar archives (up to 200MB)
+- Extracts text from .zip and .rar archives (up to 3GB)
+- Downloads to temp, extracts, then deletes - no disk bloat
 - Filters Stripe checkout URLs (allows API keys)
+- Pattern-based BIN detection (not keyword-based)
 - Auto-generates titles based on content analysis
 - Posts found leaks incrementally to SkyBin API
 """
@@ -168,8 +170,8 @@ ARCHIVE_EXTENSIONS = ['.zip', '.rar']
 # Max file size for regular files (5MB)
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
-# Max file size for archives (200MB - they compress well)
-MAX_ARCHIVE_SIZE = 200 * 1024 * 1024
+# Max file size for archives (3GB - downloaded to temp, extracted, then deleted)
+MAX_ARCHIVE_SIZE = 3 * 1024 * 1024 * 1024
 
 # Concurrent file downloads limit
 MAX_CONCURRENT_DOWNLOADS = 2
@@ -199,8 +201,8 @@ LEAK_KEYWORDS = [
     'log', 'logs', 'fresh logs', 'cloud logs',
     # Credential formats
     'email:pass', 'user:pass', 'mail:pass', 'url:login:pass', 'ulp',
-    # BIN/Card related (user requested)
-    'bin', 'bins', 'binning', 'fullz', 'cc', 'cvv',
+    # Card related (fullz/cvv only - BIN detection is pattern-based below)
+    'fullz', 'cvv', 'credit card', 'card dump',
     # Service accounts
     'netflix', 'spotify', 'disney', 'hbo', 'amazon', 'prime', 'vpn', 'nord',
     'express', 'steam', 'fortnite', 'minecraft', 'roblox', 'epic', 'origin',
@@ -218,6 +220,37 @@ SKIP_KEYWORDS = [
     'payment link', 'pay now', 'subscribe now', 'buy now',
     'donation', 'donate', 'tip jar', 'ko-fi', 'patreon',
 ]
+
+def has_actual_bin_data(text: str) -> bool:
+    """
+    Check for actual BIN/card data patterns, not just keywords.
+    BINs are 6-8 digit bank identification numbers.
+    """
+    # Look for actual BIN list patterns:
+    # - Multiple 6-digit numbers on separate lines
+    # - Card number patterns (13-19 digits)
+    # - CVV patterns (3-4 digits after card info)
+    # - Expiry patterns (MM/YY or MM/YYYY)
+    
+    # Count lines that look like BIN entries (6+ digits at start)
+    bin_line_pattern = re.compile(r'^\s*\d{6,8}\b', re.MULTILINE)
+    bin_lines = len(bin_line_pattern.findall(text))
+    
+    # Count full card number patterns (13-19 digits, possibly with spaces/dashes)
+    card_pattern = re.compile(r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{1,7}\b')
+    card_count = len(card_pattern.findall(text))
+    
+    # Count CVV patterns (3-4 digits after pipe or tab, common in dumps)
+    cvv_pattern = re.compile(r'[|\t]\s*\d{3,4}\s*$', re.MULTILINE)
+    cvv_count = len(cvv_pattern.findall(text))
+    
+    # Count expiry date patterns
+    expiry_pattern = re.compile(r'\b(0[1-9]|1[0-2])[/\-](2[4-9]|[3-9]\d|\d{4})\b')
+    expiry_count = len(expiry_pattern.findall(text))
+    
+    # Require multiple actual BIN/card patterns, not just keywords
+    return (bin_lines >= 5 or card_count >= 3 or 
+            (cvv_count >= 2 and expiry_count >= 2))
 
 def is_leak_content(text: str) -> bool:
     """
@@ -258,8 +291,8 @@ def is_leak_content(text: str) -> bool:
     # Check for leak keywords
     keyword_count = sum(1 for kw in LEAK_KEYWORDS if kw in lower)
     
-    # Check specifically for bin/bins/binning content (user requested)
-    has_bin_content = any(kw in lower for kw in ['bin', 'bins', 'binning', 'fullz', 'cvv'])
+    # Check for ACTUAL BIN/card data patterns (not just keywords)
+    has_bin_data = has_actual_bin_data(text)
     
     # Accept if:
     # 1. Any email:pass combo
@@ -267,7 +300,7 @@ def is_leak_content(text: str) -> bool:
     # 3. Any ULP format entry
     # 4. Any credential pattern (API key, token, etc)
     # 5. Private key
-    # 6. Has bin/card content
+    # 6. Has actual BIN/card data patterns
     # 7. 3+ leak keywords (suggests leak content)
     return (
         email_pass_count >= MIN_EMAIL_PASS_COMBOS or
@@ -275,7 +308,7 @@ def is_leak_content(text: str) -> bool:
         ulp_count >= 1 or
         cred_pattern_count >= MIN_CREDENTIAL_PATTERNS or
         has_private_key or
-        has_bin_content or
+        has_bin_data or
         keyword_count >= 3
     )
 
@@ -312,8 +345,8 @@ def generate_auto_title(content: str, channel_name: str = "Telegram") -> str:
         format_type = "Email:Pass"
     elif re.search(r'\b[a-zA-Z0-9_.+-]+:[^\s@:]{6,}', content):
         format_type = "User:Pass"
-    elif any(kw in lower for kw in ['bin', 'bins', 'fullz', 'cvv']):
-        format_type = "BINs"
+    elif has_actual_bin_data(content):
+        format_type = "BINs/Cards"
     
     # Count credentials
     email_pass_count = len(re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@:]{4,}', content))
@@ -534,11 +567,16 @@ class TelegramScraper:
             elif lower_filename.endswith('.rar') and HAS_RARFILE:
                 # Write to temp file for rarfile (it needs a file path)
                 buffer.seek(0)
-                with tempfile.NamedTemporaryFile(suffix='.rar', delete=False) as tmp:
-                    tmp.write(buffer.read())
-                    tmp_path = tmp.name
-                
+                tmp_path = None
                 try:
+                    with tempfile.NamedTemporaryFile(suffix='.rar', delete=False) as tmp:
+                        tmp.write(buffer.read())
+                        tmp_path = tmp.name
+                    
+                    # Clear buffer to free memory
+                    buffer.seek(0)
+                    buffer.truncate(0)
+                    
                     with rarfile.RarFile(tmp_path, 'r') as rf:
                         for info in rf.infolist():
                             # Skip directories and large files
@@ -562,7 +600,10 @@ class TelegramScraper:
                                 except Exception as e:
                                     logger.debug(f"    Error extracting {info.filename}: {e}")
                 finally:
-                    os.unlink(tmp_path)  # Clean up temp file
+                    # Always clean up temp file
+                    if tmp_path and os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                        logger.debug(f"    Cleaned up temp file: {tmp_path}")
             
             elif lower_filename.endswith('.rar') and not HAS_RARFILE:
                 logger.warning(f"  Cannot extract .rar - rarfile not installed")
@@ -616,17 +657,48 @@ class TelegramScraper:
                 size_str = f"{file_size / 1024 / 1024:.1f}MB" if file_size > 1024*1024 else f"{file_size / 1024:.1f}KB"
                 logger.info(f"  📥 Downloading: {filename} ({size_str})")
                 
-                # Download to memory (BytesIO)
-                buffer = io.BytesIO()
-                await self.client.download_media(message, buffer)
-                buffer.seek(0)
-                
                 self.processed_files.add(file_id)
                 
-                # Handle archives - extract and post each text file
+                # Handle archives - download to temp file for large ones
                 if is_archive:
-                    logger.info(f"  📦 Extracting archive: {filename}")
+                    logger.info(f"  📦 Processing archive: {filename}")
+                    
+                    # For large archives, download directly to temp file
+                    if file_size > 100 * 1024 * 1024:  # > 100MB
+                        tmp_path = None
+                        try:
+                            with tempfile.NamedTemporaryFile(suffix=os.path.splitext(filename)[1], delete=False) as tmp:
+                                tmp_path = tmp.name
+                            
+                            logger.info(f"  📥 Downloading large archive to temp...")
+                            await self.client.download_media(message, tmp_path)
+                            
+                            # Read into buffer for extraction
+                            with open(tmp_path, 'rb') as f:
+                                buffer = io.BytesIO(f.read())
+                            
+                            # Delete temp file immediately after reading
+                            os.unlink(tmp_path)
+                            tmp_path = None
+                            logger.info(f"  🗑️ Temp file deleted, extracting from memory...")
+                            
+                        except Exception as e:
+                            logger.error(f"  Error with large archive: {e}")
+                            if tmp_path and os.path.exists(tmp_path):
+                                os.unlink(tmp_path)
+                            return False
+                    else:
+                        # Smaller archives - download to memory
+                        buffer = io.BytesIO()
+                        await self.client.download_media(message, buffer)
+                        buffer.seek(0)
+                    
                     extracted = await self.extract_text_from_archive(buffer, filename, channel_name)
+                    
+                    # Clear buffer to free memory
+                    buffer.close()
+                    del buffer
+                    
                     if extracted > 0:
                         self.files_downloaded += extracted
                         logger.info(f"  ✓ Extracted {extracted} files from: {filename}")
@@ -634,6 +706,11 @@ class TelegramScraper:
                     else:
                         logger.info(f"  No text files found in archive: {filename}")
                         return False
+                
+                # For regular files, download to memory
+                buffer = io.BytesIO()
+                await self.client.download_media(message, buffer)
+                buffer.seek(0)
                 
                 # Handle plain text files
                 try:
