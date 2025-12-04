@@ -1,13 +1,23 @@
-# SkyBin
+# SkyBin v1.3.0
 
 Paste aggregator that monitors public paste sites for leaked credentials, API keys, and sensitive data.
 
 **Live:** https://skybin.lol | https://bin.nullme.lol
 
+## What's New in v1.3.0
+
+- **24 paste sources** enabled for maximum coverage
+- **No content filters** - captures everything for admin moderation  
+- **Professional /status page** with real-time source monitoring
+- **Clickable sources widget** showing live active/idle status
+- **Admin bulk delete** - select multiple pastes at once
+- **Fixed GitHub Gists** - now fetches actual content
+- **Fixed Ideone** - scraping 24 pastes per cycle
+
 ## Features
 
-- Scrapes 20+ paste sites every 30 seconds
-- 50+ detection patterns for credentials, tokens, API keys
+- Scrapes 24 paste sites every 30 seconds
+- 41 detection patterns for credentials, tokens, API keys
 - Smart auto-titling (identifies Disney+, Netflix, Spotify logins, etc.)
 - **Anonymous comments** on pastes - no login required
 - **Export to JSON/CSV** for offline analysis
@@ -30,9 +40,15 @@ Paste aggregator that monitors public paste sites for leaked credentials, API ke
 - **Auth:** OAuth tokens, JWT, Bearer tokens, API keys
 - **Infrastructure:** SSH keys, database strings, private keys
 
-## Sources (18)
+## Active Sources
 
-Pastebin, GitHub Gists, Ideone, Bpa.st, Pastecode, dpaste.org, Defuse, Codepad, Slexy, ControlC, Hastebin, Ghostbin, Ubuntu Pastebin, ix.io, JustPaste, Rentry, dpaste.com, External URLs
+| Source | Status | Rate |
+|--------|--------|------|
+| Pastebin | ✅ Active | 30/cycle |
+| GitHub Gists | ✅ Active | 15/cycle |
+| Ideone | ✅ Active | 24/cycle |
+
+*Most paste sites don't have public APIs - submit URLs via `/api/submit-url`*
 
 ## API
 
