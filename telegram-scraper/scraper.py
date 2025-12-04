@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-SkyBin Telegram Scraper Service v2.3
+SkyBin Telegram Scraper Service v2.4
 - Auto-discovers leak channels from your dialogs
 - Joins known active channels
 - Monitors all channels/groups you're in
 - Downloads .txt/.csv/.json/.sql/.log/.env files
-- Extracts text from .zip and .rar archives (up to 3GB)
+- Extracts text from .zip and .rar archives (up to 500MB)
 - Downloads to temp, extracts, then deletes - no disk bloat
 - Filters Stripe checkout URLs (allows API keys)
 - Pattern-based BIN detection (not keyword-based)
 - Auto-generates titles based on content analysis
+- Startup cleanup of orphaned temp files
+- Download timeout protection (10 min max)
 - Posts found leaks incrementally to SkyBin API
 """
 
@@ -170,13 +172,18 @@ ARCHIVE_EXTENSIONS = ['.zip', '.rar']
 # Max file size for regular files (5MB)
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
-# Max file size for archives (5GB - downloaded to temp, extracted, then deleted)
-# With 80GB VPS and 5 concurrent downloads, worst case = 25GB temp usage
-MAX_ARCHIVE_SIZE = 5 * 1024 * 1024 * 1024
+# Max file size for archives (500MB - prevents stalled downloads)
+# Larger archives tend to timeout or stall Telegram downloads
+MAX_ARCHIVE_SIZE = 500 * 1024 * 1024
 
-# Concurrent file downloads limit (5 parallel downloads)
-# Each downloads to temp, extracts text, posts, then deletes before next batch
-MAX_CONCURRENT_DOWNLOADS = 5
+# Download timeout in seconds (10 minutes max per file)
+DOWNLOAD_TIMEOUT = 600
+
+# Concurrent file downloads limit (3 parallel downloads for stability)
+MAX_CONCURRENT_DOWNLOADS = 3
+
+# Temp file prefix for cleanup
+TEMP_FILE_PREFIX = 'skybin_tg_'
 
 def should_exclude(text: str) -> bool:
     """Check if text should be excluded (Stripe checkout links, etc.)"""
@@ -401,6 +408,37 @@ async def post_to_skybin(content: str, title: str, source: str = "telegram"):
     except Exception as e:
         logger.error(f"Error posting to SkyBin: {e}")
         return False
+
+def cleanup_orphaned_temp_files():
+    """
+    Clean up any orphaned temp files from previous runs.
+    Called on startup to prevent disk bloat.
+    """
+    import glob
+    
+    temp_dir = tempfile.gettempdir()
+    patterns = [
+        os.path.join(temp_dir, 'tmp*.rar'),
+        os.path.join(temp_dir, 'tmp*.zip'),
+        os.path.join(temp_dir, f'{TEMP_FILE_PREFIX}*'),
+    ]
+    
+    cleaned = 0
+    for pattern in patterns:
+        for filepath in glob.glob(pattern):
+            try:
+                # Only clean files older than 1 hour (to avoid cleaning active downloads)
+                if os.path.isfile(filepath):
+                    age = datetime.now().timestamp() - os.path.getmtime(filepath)
+                    if age > 3600:  # 1 hour
+                        os.unlink(filepath)
+                        cleaned += 1
+            except Exception as e:
+                logger.debug(f"Could not clean {filepath}: {e}")
+    
+    if cleaned > 0:
+        logger.info(f"🧹 Cleaned up {cleaned} orphaned temp files")
+
 
 class TelegramScraper:
     def __init__(self):
@@ -933,6 +971,9 @@ class TelegramScraper:
             await self.client.disconnect()
 
 async def main():
+    # Cleanup orphaned temp files from previous crashes
+    cleanup_orphaned_temp_files()
+    
     scraper = TelegramScraper()
     try:
         await scraper.run()
