@@ -1,10 +1,10 @@
-# SkyBin v1.4.0
+# SkyBin v1.5.0
 
 Paste aggregator that monitors public paste sites and Telegram stealer log channels for leaked credentials, API keys, and sensitive data.
 
 **Live:** https://skybin.lol | https://bin.nullme.lol
 
-## What's New in v1.4.0
+## What's New in v1.5.0
 
 - **40+ Telegram channels** - monitors stealer log clouds (Daisy, Bugatti, Cuckoo, Moon, StarLink, etc.)
 - **Expanded detection** - 50+ leak keywords, platform-specific token patterns

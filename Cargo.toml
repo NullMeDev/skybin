@@ -1,6 +1,6 @@
 [package]
 name = "paste-vault"
-version = "1.4.0"
+version = "1.5.0"
 edition = "2021"
 authors = ["NullMe <dev@nullme.lol>"]
 description = "Multi-source paste aggregator with pattern detection"

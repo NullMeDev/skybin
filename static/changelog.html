@@ -56,7 +56,7 @@
 <body>
     <nav>
         <div class="container">
-            <a href="/" class="logo">SkyBin <span>v1.4.0</span></a>
+            <a href="/" class="logo">SkyBin <span>v1.5.0</span></a>
             <ul class="nav-links">
                 <li><a href="/">Feed</a></li>
                 <li><a href="/search">Search</a></li>
@@ -73,6 +73,27 @@
             <div class="page-header">
                 <h1>Changelog</h1>
                 <p>Release history and updates for SkyBin</p>
+            </div>
+
+            <div class="changelog-entry">
+                <h3>
+                    <span class="version">v1.5.0</span>
+                    📦 Telegram Archive Extraction & Enhanced Filtering
+                </h3>
+                <div class="date">December 4, 2025</div>
+                <ul>
+                    <li><span class="tag tag-feature">New</span> Archive extraction - downloads and extracts .zip/.rar files up to 5GB from Telegram channels</li>
+                    <li><span class="tag tag-feature">New</span> File download support - .txt, .csv, .json, .sql, .log, .env files from channels like .boxed.pw</li>
+                    <li><span class="tag tag-feature">New</span> Auto-title generation based on content analysis (service detection, format type, combo count)</li>
+                    <li><span class="tag tag-feature">New</span> Telegram source filter button on main feed</li>
+                    <li><span class="tag tag-feature">New</span> Pattern-based BIN detection (requires actual card numbers, not just keywords)</li>
+                    <li><span class="tag tag-perf">Improved</span> 5 concurrent file downloads (was 2) with temp file cleanup</li>
+                    <li><span class="tag tag-perf">Improved</span> Silent page refresh - no loading flicker on auto-refresh</li>
+                    <li><span class="tag tag-perf">Improved</span> Downloads to temp → extracts text → posts → deletes (no disk bloat)</li>
+                    <li><span class="tag tag-fix">Fixed</span> Stripe checkout links filtered (checkout.stripe.com, buy.stripe.com) but API keys allowed</li>
+                    <li><span class="tag tag-fix">Fixed</span> BIN false positives - removed keyword triggers, now requires actual card patterns</li>
+                    <li><span class="tag tag-fix">Fixed</span> Disabled broken scrapers: psbdmp, tor_pastes, stronghold, deepaste, ix.io</li>
+                </ul>
             </div>
 
             <div class="changelog-entry">
