@@ -60,7 +60,9 @@ pub struct ScrapingConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourcesConfig {
     pub pastebin: bool,
-    pub gists: bool,
+    #[serde(default)]
+    pub github: bool,  // GitHub code search for exposed secrets
+    pub gists: bool,   // Legacy gists scraper (deprecated)
     pub paste_ee: bool,
     pub rentry: bool,
     pub ghostbin: bool,
@@ -114,6 +116,9 @@ impl SourcesConfig {
         let mut sources = Vec::new();
         if self.pastebin {
             sources.push("pastebin");
+        }
+        if self.github {
+            sources.push("github");
         }
         if self.gists {
             sources.push("gists");

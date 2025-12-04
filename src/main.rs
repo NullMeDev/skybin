@@ -7,10 +7,10 @@ use paste_vault::scheduler::Scheduler;
 use paste_vault::scrapers::traits::Scraper;
 use paste_vault::scrapers::{
     BpastScraper, BpasteScraper, CodepadScraper, ControlcScraper, DPasteScraper, DefuseScraper,
-    DpasteOrgScraper, ExternalUrlScraper, GhostbinScraper, GitHubGistsScraper, HastebinScraper,
-    IdeoneScraper, IxioScraper, JustPasteScraper, Paste2Scraper, PasteEeScraper, PasteRsScraper,
-    PastebinPlScraper, PastebinScraper, PastecodeScraper, PastesioScraper, PsbdmpScraper,
-    QuickpasteScraper, RentryScraper, SlexyScraper, SprungeScraper, TermbinScraper,
+    DpasteOrgScraper, ExternalUrlScraper, GhostbinScraper, GitHubCodeScraper, GitHubGistsScraper,
+    HastebinScraper, IdeoneScraper, IxioScraper, JustPasteScraper, Paste2Scraper, PasteEeScraper,
+    PasteRsScraper, PastebinPlScraper, PastebinScraper, PastecodeScraper, PastesioScraper,
+    PsbdmpScraper, QuickpasteScraper, RentryScraper, SlexyScraper, SprungeScraper, TermbinScraper,
     TorPastesScraper, UbuntuPastebinScraper,
 };
 use paste_vault::web::{create_router, AppState};
@@ -94,6 +94,16 @@ async fn main() -> anyhow::Result<()> {
     if config.sources.pastebin {
         spawn_scraper("pastebin", Box::new(PastebinScraper::new()));
     }
+    // GitHub Code Search (recommended - finds exposed secrets in repos)
+    if config.sources.github {
+        let github_scraper = if !config.apis.github_token.is_empty() {
+            GitHubCodeScraper::with_token(config.apis.github_token.clone())
+        } else {
+            GitHubCodeScraper::new()
+        };
+        spawn_scraper("github", Box::new(github_scraper));
+    }
+    // Legacy gists scraper (deprecated, use github instead)
     if config.sources.gists {
         let gists_scraper = if !config.apis.github_token.is_empty() {
             GitHubGistsScraper::with_token(config.apis.github_token.clone())
