@@ -55,6 +55,22 @@ pub struct SeverityStats {
     pub low: i64,
 }
 
+/// GET /api/scrapers/health - Get scraper health status
+pub async fn scraper_health(
+    State(state): State<AppState>,
+) -> Result<Json<ApiResponse<Vec<crate::db::ScraperHealth>>>, ApiError> {
+    let db = state
+        .db
+        .lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let health = db
+        .get_scraper_health()
+        .map_err(|e| ApiError(format!("Failed to get scraper health: {}", e)))?;
+    
+    Ok(Json(ApiResponse::ok(health)))
+}
+
 // Static HTML file serving
 const INDEX_HTML: &str = include_str!("../../static/index.html");
 const SEARCH_HTML: &str = include_str!("../../static/search.html");

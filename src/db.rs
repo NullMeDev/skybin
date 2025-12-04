@@ -13,6 +13,17 @@ pub enum DbError {
 
 pub type Result<T> = std::result::Result<T, DbError>;
 
+/// Scraper health status
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ScraperHealth {
+    pub source: String,
+    pub last_run: i64,
+    pub success_rate: i64,  // percentage 0-100
+    pub total_runs: i64,
+    pub pastes_found: i64,
+    pub status: String,  // "healthy", "degraded", "failing", "stale"
+}
+
 /// Database connection wrapper
 pub struct Database {
     conn: Connection,
@@ -596,6 +607,66 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
             .map(|iter| iter.collect::<SqlResult<Vec<_>>>())??;
         Ok(breakdown)
+    }
+
+    /// Get comprehensive scraper health status
+    /// Returns: (source, last_run, success_rate, total_runs, pastes_found, status)
+    pub fn get_scraper_health(&self) -> Result<Vec<ScraperHealth>> {
+        // Get stats for last hour for recency, and last 24h for health metrics
+        let hour_ago = chrono::Utc::now().timestamp() - 3600;
+        let day_ago = chrono::Utc::now().timestamp() - (24 * 3600);
+        
+        let mut stmt = self.conn.prepare(
+            "SELECT 
+                source,
+                MAX(timestamp) as last_run,
+                SUM(success) as successes,
+                SUM(failure) as failures,
+                SUM(pastes_found) as total_pastes
+             FROM scraper_stats 
+             WHERE timestamp > ?
+             GROUP BY source
+             ORDER BY source",
+        )?;
+        
+        let health = stmt
+            .query_map(params![day_ago], |row| {
+                let source: String = row.get(0)?;
+                let last_run: i64 = row.get(1)?;
+                let successes: i64 = row.get(2)?;
+                let failures: i64 = row.get(3)?;
+                let pastes_found: i64 = row.get(4)?;
+                
+                let total = successes + failures;
+                let success_rate = if total > 0 {
+                    (successes as f64 / total as f64 * 100.0) as i64
+                } else {
+                    0
+                };
+                
+                // Determine status based on metrics
+                let status = if last_run < hour_ago {
+                    "stale".to_string()  // No runs in last hour
+                } else if success_rate < 50 {
+                    "degraded".to_string()  // High failure rate
+                } else if failures > 0 && successes == 0 {
+                    "failing".to_string()  // All recent runs failed
+                } else {
+                    "healthy".to_string()
+                };
+                
+                Ok(ScraperHealth {
+                    source,
+                    last_run,
+                    success_rate,
+                    total_runs: total,
+                    pastes_found,
+                    status,
+                })
+            })?
+            .collect::<SqlResult<Vec<_>>>()?;
+        
+        Ok(health)
     }
 
     /// Helper function to convert a database row to a Paste struct

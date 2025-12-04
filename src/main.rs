@@ -53,7 +53,7 @@ async fn main() -> anyhow::Result<()> {
     let external_scraper = Arc::new(ExternalUrlScraper::new());
     let external_scraper_clone = external_scraper.clone();
 
-    // Helper to spawn a scraper task
+    // Helper to spawn a scraper task with health tracking
     let spawn_scraper = |name: &'static str, scraper: Box<dyn Scraper + Send + Sync>| {
         let scraper_config = config.clone();
         let detector = detector_clone.clone();
@@ -61,7 +61,19 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(async move {
             let client = reqwest::Client::new();
             loop {
-                match scraper.fetch_recent(&client).await {
+                let result = scraper.fetch_recent(&client).await;
+                
+                // Log scraper health stats
+                let (success, pastes_found) = match &result {
+                    Ok(pastes) => (true, pastes.len()),
+                    Err(_) => (false, 0),
+                };
+                
+                if let Ok(mut stats_db) = Database::open(&scraper_config.storage.db_path) {
+                    let _ = stats_db.log_scraper_stat(name, success, pastes_found);
+                }
+                
+                match result {
                     Ok(discovered_pastes) => {
                         if !discovered_pastes.is_empty() {
                             println!("✓ [{}] Fetched {} pastes", name, discovered_pastes.len());
