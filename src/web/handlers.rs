@@ -110,8 +110,9 @@ pub async fn get_pastes(
         .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
     
     let limit = filters.limit.unwrap_or(50).min(100) as usize;
+    let offset = filters.offset.unwrap_or(0) as usize;
     let pastes = db
-        .get_recent_pastes(limit)
+        .get_recent_pastes_offset(limit, offset)
         .map_err(|e| ApiError(format!("Failed to fetch pastes: {}", e)))?;
 
     let responses = pastes

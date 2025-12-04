@@ -203,16 +203,21 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         }
     }
 
-    /// Get recent pastes
+    /// Get recent pastes with pagination
     pub fn get_recent_pastes(&self, limit: usize) -> Result<Vec<Paste>> {
+        self.get_recent_pastes_offset(limit, 0)
+    }
+
+    /// Get recent pastes with limit and offset for pagination
+    pub fn get_recent_pastes_offset(&self, limit: usize, offset: usize) -> Result<Vec<Paste>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, source, source_id, title, author, content, content_hash, url, 
              syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
-             FROM pastes ORDER BY created_at DESC LIMIT ?",
+             FROM pastes ORDER BY created_at DESC LIMIT ? OFFSET ?",
         )?;
 
         let pastes = stmt
-            .query_map(params![limit], Self::row_to_paste)?
+            .query_map(params![limit, offset], Self::row_to_paste)?
             .collect::<SqlResult<Vec<_>>>()?;
 
         Ok(pastes)
