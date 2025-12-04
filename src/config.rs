@@ -98,6 +98,8 @@ pub struct SourcesConfig {
     pub pastebin_pl: bool,
     #[serde(default)]
     pub quickpaste: bool,
+    #[serde(default)]
+    pub psbdmp: bool,
 }
 
 impl SourcesConfig {
@@ -175,6 +177,9 @@ impl SourcesConfig {
         }
         if self.quickpaste {
             sources.push("quickpaste");
+        }
+        if self.psbdmp {
+            sources.push("psbdmp");
         }
         sources
     }

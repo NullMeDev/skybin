@@ -9,8 +9,8 @@ use paste_vault::scrapers::{
     BpasteScraper, CodepadScraper, ControlcScraper, DPasteScraper, DefuseScraper, DpasteOrgScraper,
     ExternalUrlScraper, GhostbinScraper, GitHubGistsScraper, HastebinScraper, IdeoneScraper,
     IxioScraper, JustPasteScraper, Paste2Scraper, PasteEeScraper, PasteRsScraper,
-    PastebinPlScraper, PastebinScraper, PastecodeScraper, QuickpasteScraper, RentryScraper,
-    SlexyScraper, SprungeScraper, TermbinScraper, UbuntuPastebinScraper,
+    PastebinPlScraper, PastebinScraper, PastecodeScraper, PsbdmpScraper, QuickpasteScraper,
+    RentryScraper, SlexyScraper, SprungeScraper, TermbinScraper, UbuntuPastebinScraper,
 };
 use paste_vault::web::{create_router, AppState};
 use std::sync::{Arc, Mutex};
@@ -167,8 +167,11 @@ async fn main() -> anyhow::Result<()> {
     if config.sources.quickpaste {
         spawn_scraper("quickpaste", Box::new(QuickpasteScraper::new()));
     }
+    if config.sources.psbdmp {
+        spawn_scraper("psbdmp", Box::new(PsbdmpScraper::new()));
+    }
 
-    // External URL scraper (always enabled for URL submissions)
+    // External URL scraper
     let scraper_for_task = (*external_scraper_clone).clone();
     spawn_scraper("external_url", Box::new(scraper_for_task));
 
