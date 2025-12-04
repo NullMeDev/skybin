@@ -12,4 +12,5 @@ pub mod quality;
 pub mod rate_limiter;
 pub mod scheduler;
 pub mod scrapers;
+pub mod validator;
 pub mod web;

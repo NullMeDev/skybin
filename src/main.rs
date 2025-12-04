@@ -10,7 +10,8 @@ use paste_vault::scrapers::{
     ExternalUrlScraper, GhostbinScraper, GitHubGistsScraper, HastebinScraper, IdeoneScraper,
     IxioScraper, JustPasteScraper, Paste2Scraper, PasteEeScraper, PasteRsScraper,
     PastebinPlScraper, PastebinScraper, PastecodeScraper, PsbdmpScraper, QuickpasteScraper,
-    RentryScraper, SlexyScraper, SprungeScraper, TermbinScraper, UbuntuPastebinScraper,
+    RentryScraper, SlexyScraper, SprungeScraper, TermbinScraper, TorPastesScraper,
+    UbuntuPastebinScraper,
 };
 use paste_vault::web::{create_router, AppState};
 use std::sync::{Arc, Mutex};
@@ -169,6 +170,10 @@ async fn main() -> anyhow::Result<()> {
     }
     if config.sources.psbdmp {
         spawn_scraper("psbdmp", Box::new(PsbdmpScraper::new()));
+    }
+    if config.sources.tor_pastes {
+        let tor_scraper = TorPastesScraper::with_proxy(config.scraping.proxy.clone());
+        spawn_scraper("tor_pastes", Box::new(tor_scraper));
     }
 
     // External URL scraper

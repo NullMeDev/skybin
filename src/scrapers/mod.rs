@@ -24,6 +24,7 @@ pub mod rentry;
 pub mod slexy;
 pub mod sprunge;
 pub mod termbin;
+pub mod tor_pastes;
 pub mod traits;
 pub mod ubuntu_pastebin;
 
@@ -52,5 +53,6 @@ pub use rentry::RentryScraper;
 pub use slexy::SlexyScraper;
 pub use sprunge::SprungeScraper;
 pub use termbin::TermbinScraper;
+pub use tor_pastes::TorPastesScraper;
 pub use traits::{Scraper, ScraperError, ScraperResult};
 pub use ubuntu_pastebin::UbuntuPastebinScraper;

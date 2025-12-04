@@ -126,7 +126,42 @@ CREATE TABLE IF NOT EXISTS comments (
 CREATE INDEX IF NOT EXISTS idx_comments_paste_id ON comments(paste_id);
 CREATE INDEX IF NOT EXISTS idx_comments_created_at ON comments(created_at DESC);
 
-INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', '002');
+-- Scraper stats table for tracking source health
+CREATE TABLE IF NOT EXISTS scraper_stats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    success INTEGER DEFAULT 0,
+    failure INTEGER DEFAULT 0,
+    pastes_found INTEGER DEFAULT 0,
+    timestamp INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_scraper_stats_source ON scraper_stats(source);
+CREATE INDEX IF NOT EXISTS idx_scraper_stats_timestamp ON scraper_stats(timestamp DESC);
+
+-- Activity logs (anonymized)
+CREATE TABLE IF NOT EXISTS activity_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,
+    details TEXT,
+    timestamp INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_logs_timestamp ON activity_logs(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON activity_logs(action);
+
+-- Trigger to keep activity logs under 10000 entries
+CREATE TRIGGER IF NOT EXISTS enforce_max_activity_logs AFTER INSERT ON activity_logs
+WHEN (SELECT COUNT(*) FROM activity_logs) > 10000
+BEGIN
+    DELETE FROM activity_logs WHERE id IN (
+        SELECT id FROM activity_logs
+        ORDER BY timestamp ASC
+        LIMIT ((SELECT COUNT(*) FROM activity_logs) - 10000)
+    );
+END;
+
+INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', '003');
 INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 "#,
         )?;
@@ -464,6 +499,103 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         let mut stmt = self.conn.prepare("SELECT 1 FROM pastes WHERE content_hash = ? LIMIT 1")?;
         let exists = stmt.exists(params![hash])?;
         Ok(exists)
+    }
+
+    // === ANALYTICS METHODS ===
+
+    /// Log a scraper run result
+    pub fn log_scraper_stat(&mut self, source: &str, success: bool, pastes_found: usize) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+        self.conn.execute(
+            "INSERT INTO scraper_stats (source, success, failure, pastes_found, timestamp) VALUES (?, ?, ?, ?, ?)",
+            params![source, if success { 1 } else { 0 }, if success { 0 } else { 1 }, pastes_found as i64, now],
+        )?;
+        Ok(())
+    }
+
+    /// Get scraper stats for a time period (last N hours)
+    pub fn get_scraper_stats(&self, hours: i64) -> Result<Vec<(String, i64, i64, i64)>> {
+        let cutoff = chrono::Utc::now().timestamp() - (hours * 3600);
+        let mut stmt = self.conn.prepare(
+            "SELECT source, SUM(success), SUM(failure), SUM(pastes_found) 
+             FROM scraper_stats WHERE timestamp > ? GROUP BY source",
+        )?;
+        let stats = stmt
+            .query_map(params![cutoff], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })?
+            .collect::<SqlResult<Vec<_>>>()?;
+        Ok(stats)
+    }
+
+    /// Get hourly scrape rates for charts (last 24 hours)
+    pub fn get_hourly_scrape_rates(&self) -> Result<Vec<(i64, i64)>> {
+        let cutoff = chrono::Utc::now().timestamp() - (24 * 3600);
+        let mut stmt = self.conn.prepare(
+            "SELECT (timestamp / 3600) * 3600 as hour, SUM(pastes_found) 
+             FROM scraper_stats WHERE timestamp > ? GROUP BY hour ORDER BY hour",
+        )?;
+        let rates = stmt
+            .query_map(params![cutoff], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map(|iter| iter.collect::<SqlResult<Vec<_>>>())??;
+        Ok(rates)
+    }
+
+    /// Get pattern hit counts for charts
+    pub fn get_pattern_hits(&self) -> Result<Vec<(String, i64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT matched_patterns, COUNT(*) FROM pastes 
+             WHERE matched_patterns IS NOT NULL AND matched_patterns != '' 
+             GROUP BY matched_patterns ORDER BY COUNT(*) DESC LIMIT 20",
+        )?;
+        let hits = stmt
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get(1)?)))
+            .map(|iter| iter.collect::<SqlResult<Vec<_>>>())??;
+        Ok(hits)
+    }
+
+    /// Log an anonymized activity
+    pub fn log_activity(&mut self, action: &str, details: Option<&str>) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+        self.conn.execute(
+            "INSERT INTO activity_logs (action, details, timestamp) VALUES (?, ?, ?)",
+            params![action, details, now],
+        )?;
+        Ok(())
+    }
+
+    /// Get recent activity logs
+    pub fn get_activity_logs(&self, limit: usize) -> Result<Vec<(String, Option<String>, i64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT action, details, timestamp FROM activity_logs ORDER BY timestamp DESC LIMIT ?",
+        )?;
+        let logs = stmt
+            .query_map(params![limit], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .map(|iter| iter.collect::<SqlResult<Vec<_>>>())??;
+        Ok(logs)
+    }
+
+    /// Get activity counts by action type (last 24 hours)
+    pub fn get_activity_counts(&self) -> Result<Vec<(String, i64)>> {
+        let cutoff = chrono::Utc::now().timestamp() - (24 * 3600);
+        let mut stmt = self.conn.prepare(
+            "SELECT action, COUNT(*) FROM activity_logs WHERE timestamp > ? GROUP BY action",
+        )?;
+        let counts = stmt
+            .query_map(params![cutoff], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map(|iter| iter.collect::<SqlResult<Vec<_>>>())??;
+        Ok(counts)
+    }
+
+    /// Get pastes per source (for source breakdown)
+    pub fn get_source_breakdown(&self) -> Result<Vec<(String, i64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT source, COUNT(*) FROM pastes GROUP BY source ORDER BY COUNT(*) DESC",
+        )?;
+        let breakdown = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map(|iter| iter.collect::<SqlResult<Vec<_>>>())??;
+        Ok(breakdown)
     }
 
     /// Helper function to convert a database row to a Paste struct

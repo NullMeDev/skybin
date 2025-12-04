@@ -154,6 +154,9 @@ pub async fn get_paste_api(
 
     // Increment view count
     let _ = db.increment_view_count(&id);
+    
+    // Log anonymized activity (paste ID only, no user info)
+    let _ = db.log_activity("paste_view", Some(&paste.source));
 
     let patterns = paste.matched_patterns.unwrap_or_default();
 
@@ -273,10 +276,14 @@ pub async fn search_api(
     State(state): State<AppState>,
     Query(filters): Query<SearchFilters>,
 ) -> Result<Json<ApiResponse<Vec<PasteListItem>>>, ApiError> {
-    let db = state
+    let mut db = state
         .db
         .lock()
         .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    // Log anonymized search activity (no query content for privacy)
+    let _ = db.log_activity("search", filters.source.as_deref());
+    
     let pastes = db
         .search_pastes(&filters)
         .map_err(|e| ApiError(format!("Search failed: {}", e)))?;
@@ -791,4 +798,143 @@ pub async fn admin_purge_source(
         .map_err(|e| ApiError(format!("Failed to purge: {}", e)))?;
     
     Ok(Json(ApiResponse::ok(count)))
+}
+
+// === ANALYTICS ENDPOINTS ===
+
+#[derive(Debug, Serialize)]
+pub struct SourceHealthItem {
+    pub source: String,
+    pub success_count: i64,
+    pub failure_count: i64,
+    pub pastes_found: i64,
+    pub success_rate: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct HourlyRate {
+    pub hour: i64,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PatternHit {
+    pub pattern: String,
+    pub count: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ActivityLog {
+    pub action: String,
+    pub details: Option<String>,
+    pub timestamp: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AnalyticsResponse {
+    pub source_health: Vec<SourceHealthItem>,
+    pub hourly_rates: Vec<HourlyRate>,
+    pub pattern_hits: Vec<PatternHit>,
+    pub source_breakdown: Vec<(String, i64)>,
+}
+
+/// GET /api/x/analytics - Get admin analytics dashboard data
+pub async fn admin_analytics(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<ApiResponse<AnalyticsResponse>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    let db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    // Get source health (last 24 hours)
+    let scraper_stats = db.get_scraper_stats(24)
+        .map_err(|e| ApiError(format!("Failed to get scraper stats: {}", e)))?;
+    
+    let source_health: Vec<SourceHealthItem> = scraper_stats.into_iter().map(|(source, success, failure, pastes)| {
+        let total = success + failure;
+        let rate = if total > 0 { (success as f64 / total as f64) * 100.0 } else { 0.0 };
+        SourceHealthItem {
+            source,
+            success_count: success,
+            failure_count: failure,
+            pastes_found: pastes,
+            success_rate: rate,
+        }
+    }).collect();
+    
+    // Get hourly scrape rates
+    let hourly_data = db.get_hourly_scrape_rates()
+        .map_err(|e| ApiError(format!("Failed to get hourly rates: {}", e)))?;
+    let hourly_rates: Vec<HourlyRate> = hourly_data.into_iter()
+        .map(|(hour, count)| HourlyRate { hour, count })
+        .collect();
+    
+    // Get pattern hits
+    let pattern_data = db.get_pattern_hits()
+        .map_err(|e| ApiError(format!("Failed to get pattern hits: {}", e)))?;
+    let pattern_hits: Vec<PatternHit> = pattern_data.into_iter()
+        .map(|(pattern, count)| PatternHit { pattern, count })
+        .collect();
+    
+    // Get source breakdown
+    let source_breakdown = db.get_source_breakdown()
+        .map_err(|e| ApiError(format!("Failed to get source breakdown: {}", e)))?;
+    
+    Ok(Json(ApiResponse::ok(AnalyticsResponse {
+        source_health,
+        hourly_rates,
+        pattern_hits,
+        source_breakdown,
+    })))
+}
+
+/// GET /api/x/activity - Get activity logs
+pub async fn admin_activity_logs(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<ApiResponse<Vec<ActivityLog>>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    let limit: usize = params.get("limit").and_then(|v| v.parse().ok()).unwrap_or(100);
+    
+    let db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let logs = db.get_activity_logs(limit)
+        .map_err(|e| ApiError(format!("Failed to get activity logs: {}", e)))?;
+    
+    let activity_logs: Vec<ActivityLog> = logs.into_iter()
+        .map(|(action, details, timestamp)| ActivityLog { action, details, timestamp })
+        .collect();
+    
+    Ok(Json(ApiResponse::ok(activity_logs)))
+}
+
+#[derive(Debug, Serialize)]
+pub struct ActivityCountItem {
+    pub action: String,
+    pub count: i64,
+}
+
+/// GET /api/x/activity/counts - Get activity counts by type
+pub async fn admin_activity_counts(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> Result<Json<ApiResponse<Vec<ActivityCountItem>>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    let db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let counts = db.get_activity_counts()
+        .map_err(|e| ApiError(format!("Failed to get activity counts: {}", e)))?;
+    
+    let items: Vec<ActivityCountItem> = counts.into_iter()
+        .map(|(action, count)| ActivityCountItem { action, count })
+        .collect();
+    
+    Ok(Json(ApiResponse::ok(items)))
 }

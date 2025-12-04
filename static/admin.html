@@ -65,6 +65,31 @@
         .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 24px; background: #00ff88; color: #000; border-radius: 4px; display: none; }
         .toast.error { background: #ff4444; color: #fff; }
         .toast.show { display: block; }
+        
+        /* Tabs */
+        .tabs { display: flex; gap: 0; border-bottom: 1px solid #333; margin: 0 2rem; }
+        .tab { padding: 12px 24px; cursor: pointer; color: #888; border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .tab:hover { color: #fff; }
+        .tab.active { color: #00ff88; border-bottom-color: #00ff88; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        /* Analytics Charts */
+        .chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; margin: 2rem; }
+        .chart-card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 1.5rem; }
+        .chart-card h3 { font-size: 1rem; color: #00ff88; margin-bottom: 1rem; }
+        .health-table { width: 100%; border-collapse: collapse; }
+        .health-table th, .health-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #222; }
+        .health-table th { color: #888; font-weight: 500; }
+        .health-bar { height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
+        .health-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+        .health-bar-fill.good { background: #00ff88; }
+        .health-bar-fill.warn { background: #f59e0b; }
+        .health-bar-fill.bad { background: #ff4444; }
+        .activity-list { max-height: 400px; overflow-y: auto; }
+        .activity-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #222; }
+        .activity-action { font-weight: 500; }
+        .activity-time { color: #888; font-size: 0.85rem; }
     </style>
 </head>
 <body>
@@ -85,6 +110,16 @@
             <button onclick="logout()">Logout</button>
         </div>
 
+        <!-- Tabs Navigation -->
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('overview')">📊 Overview</div>
+            <div class="tab" onclick="showTab('analytics')">📈 Analytics</div>
+            <div class="tab" onclick="showTab('pastes')">📝 Pastes</div>
+            <div class="tab" onclick="showTab('activity')">📋 Activity</div>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="tab-overview" class="tab-content active">
         <div class="stats" id="stats">
             <div class="stat-card">
                 <h3 id="stat-pastes">-</h3>
@@ -106,18 +141,50 @@
             </div>
             <div class="section-body">
                 <div class="quick-actions">
-                    <button onclick="loadPastes()">🔄 Refresh List</button>
-                    <button onclick="loadStats()">📊 Refresh Stats</button>
-                    <button onclick="toggleSelectMode()">☑️ Select Mode</button>
+                    <button onclick="loadAll()">🔄 Refresh All</button>
+                    <button onclick="loadAnalytics()">📈 Refresh Analytics</button>
                     <button class="danger" onclick="purgeSource('ideone')">🗑️ Purge Ideone</button>
                     <button class="danger" onclick="purgeSource('codepad')">🗑️ Purge Codepad</button>
                 </div>
             </div>
         </div>
+        </div> <!-- End Overview Tab -->
 
+        <!-- Analytics Tab -->
+        <div id="tab-analytics" class="tab-content">
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <h3>🏥 Source Health (24h)</h3>
+                    <table class="health-table" id="source-health-table">
+                        <thead>
+                            <tr><th>Source</th><th>Success</th><th>Failures</th><th>Pastes</th><th>Health</th></tr>
+                        </thead>
+                        <tbody id="source-health-body">
+                            <tr><td colspan="5" style="color: #888;">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="chart-card">
+                    <h3>📊 Source Distribution</h3>
+                    <div id="source-breakdown">
+                        <p style="color: #888;">Loading...</p>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h3>🎯 Pattern Hits</h3>
+                    <div id="pattern-hits">
+                        <p style="color: #888;">Loading...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pastes Tab -->
+        <div id="tab-pastes" class="tab-content">
         <div class="section">
             <div class="section-header">
                 <h2>Recent Pastes</h2>
+                <button onclick="toggleSelectMode()" style="padding: 6px 12px; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer;">☑️ Select Mode</button>
             </div>
             <div class="section-body">
                 <div class="bulk-actions" id="bulk-actions">
@@ -135,6 +202,31 @@
                 </div>
             </div>
         </div>
+        </div> <!-- End Pastes Tab -->
+
+        <!-- Activity Tab -->
+        <div id="tab-activity" class="tab-content">
+            <div class="section">
+                <div class="section-header">
+                    <h2>Activity Summary (24h)</h2>
+                </div>
+                <div class="section-body">
+                    <div id="activity-counts" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
+                        <p style="color: #888;">Loading...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="section">
+                <div class="section-header">
+                    <h2>Recent Activity (Anonymized)</h2>
+                </div>
+                <div class="section-body">
+                    <div class="activity-list" id="activity-list">
+                        <p style="color: #888;">Loading...</p>
+                    </div>
+                </div>
+            </div>
+        </div> <!-- End Activity Tab -->
     </div>
 
     <div class="toast" id="toast"></div>
@@ -404,6 +496,152 @@
             showToast(`Deleted ${deleted} pastes${failed > 0 ? `, ${failed} failed` : ''}`);
             loadPastes();
             loadStats();
+        }
+
+        // Tab navigation
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            
+            if (tabName === 'analytics') loadAnalytics();
+            if (tabName === 'activity') loadActivityLogs();
+            if (tabName === 'pastes') loadPastes();
+        }
+
+        function loadAll() {
+            loadStats();
+            loadPastes();
+            loadAnalytics();
+            loadActivityLogs();
+            showToast('Refreshed all data');
+        }
+
+        // Analytics functions
+        async function loadAnalytics() {
+            try {
+                const res = await fetch('/api/x/analytics', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    renderSourceHealth(data.data.source_health);
+                    renderSourceBreakdown(data.data.source_breakdown);
+                    renderPatternHits(data.data.pattern_hits);
+                }
+            } catch (e) {
+                showToast('Failed to load analytics', true);
+            }
+        }
+
+        function renderSourceHealth(health) {
+            const tbody = document.getElementById('source-health-body');
+            if (!health || health.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="color: #888;">No scraper data yet</td></tr>';
+                return;
+            }
+            tbody.innerHTML = health.map(h => {
+                const rate = h.success_rate.toFixed(1);
+                const barClass = rate >= 80 ? 'good' : (rate >= 50 ? 'warn' : 'bad');
+                return `
+                    <tr>
+                        <td>${escapeHtml(h.source)}</td>
+                        <td style="color: #00ff88;">${h.success_count}</td>
+                        <td style="color: #ff4444;">${h.failure_count}</td>
+                        <td>${h.pastes_found}</td>
+                        <td style="width: 100px;">
+                            <div class="health-bar">
+                                <div class="health-bar-fill ${barClass}" style="width: ${rate}%;"></div>
+                            </div>
+                            <span style="font-size: 0.8rem; color: #888;">${rate}%</span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderSourceBreakdown(breakdown) {
+            const container = document.getElementById('source-breakdown');
+            if (!breakdown || breakdown.length === 0) {
+                container.innerHTML = '<p style="color: #888;">No data</p>';
+                return;
+            }
+            const total = breakdown.reduce((sum, [_, count]) => sum + count, 0);
+            container.innerHTML = breakdown.map(([source, count]) => {
+                const pct = ((count / total) * 100).toFixed(1);
+                return `
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #222;">
+                        <span>${escapeHtml(source)}</span>
+                        <span style="color: #888;">${count} (${pct}%)</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderPatternHits(hits) {
+            const container = document.getElementById('pattern-hits');
+            if (!hits || hits.length === 0) {
+                container.innerHTML = '<p style="color: #888;">No pattern hits detected</p>';
+                return;
+            }
+            container.innerHTML = hits.slice(0, 10).map(h => {
+                const patterns = h.pattern.replace(/[\[\]"]/g, '').split(',').slice(0, 2).join(', ');
+                return `
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #222;">
+                        <span style="font-family: monospace; font-size: 0.85rem;">${escapeHtml(patterns)}</span>
+                        <span style="color: #00ff88;">${h.count}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Activity logs
+        async function loadActivityLogs() {
+            try {
+                // Load counts
+                const countsRes = await fetch('/api/x/activity/counts', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const countsData = await countsRes.json();
+                if (countsData.success) {
+                    const container = document.getElementById('activity-counts');
+                    if (countsData.data.length === 0) {
+                        container.innerHTML = '<p style="color: #888;">No activity logged yet</p>';
+                    } else {
+                        container.innerHTML = countsData.data.map(c => `
+                            <div class="stat-card" style="padding: 1rem; min-width: 120px;">
+                                <h3 style="font-size: 1.5rem;">${c.count}</h3>
+                                <p style="font-size: 0.8rem;">${escapeHtml(c.action)}</p>
+                            </div>
+                        `).join('');
+                    }
+                }
+
+                // Load recent logs
+                const logsRes = await fetch('/api/x/activity?limit=50', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const logsData = await logsRes.json();
+                if (logsData.success) {
+                    const container = document.getElementById('activity-list');
+                    if (logsData.data.length === 0) {
+                        container.innerHTML = '<p style="color: #888;">No activity logged yet</p>';
+                    } else {
+                        container.innerHTML = logsData.data.map(log => `
+                            <div class="activity-item">
+                                <div>
+                                    <span class="activity-action">${escapeHtml(log.action)}</span>
+                                    ${log.details ? `<span style="color: #888; margin-left: 8px;">(${escapeHtml(log.details)})</span>` : ''}
+                                </div>
+                                <span class="activity-time">${formatDate(log.timestamp)}</span>
+                            </div>
+                        `).join('');
+                    }
+                }
+            } catch (e) {
+                showToast('Failed to load activity logs', true);
+            }
         }
 
         // Enter key to login

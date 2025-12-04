@@ -56,7 +56,7 @@
 <body>
     <nav>
         <div class="container">
-            <a href="/" class="logo">SkyBin <span>v1.3.2</span></a>
+            <a href="/" class="logo">SkyBin <span>v1.3.3</span></a>
             <ul class="nav-links">
                 <li><a href="/">Feed</a></li>
                 <li><a href="/search">Search</a></li>
@@ -73,6 +73,26 @@
             <div class="page-header">
                 <h1>Changelog</h1>
                 <p>Release history and updates for SkyBin</p>
+            </div>
+
+            <div class="changelog-entry">
+                <h3>
+                    <span class="version">v1.3.3</span>
+                    🔒 Credential Validation & Tor Monitoring
+                </h3>
+                <div class="date">December 4, 2025</div>
+                <ul>
+                    <li><span class="tag tag-feature">New</span> Credential validation module - validates GitHub tokens, AWS keys, Stripe, OpenAI, Discord</li>
+                    <li><span class="tag tag-feature">New</span> Tor-based paste monitoring - scrapes .onion paste sites via SOCKS5 proxy</li>
+                    <li><span class="tag tag-feature">New</span> Telegram scraper service (Python/Telethon) - monitors channels for credential leaks</li>
+                    <li><span class="tag tag-feature">New</span> Credential-focused filtering - all scrapers now filter for high-value credentials only</li>
+                    <li><span class="tag tag-feature">New</span> Admin dashboard analytics with scrape rates and pattern hit charts</li>
+                    <li><span class="tag tag-feature">New</span> Source health monitoring - real-time success/failure rates</li>
+                    <li><span class="tag tag-feature">New</span> Anonymized activity logs - track searches/views without exposing user info</li>
+                    <li><span class="tag tag-feature">New</span> Rate limit controls in admin UI</li>
+                    <li><span class="tag tag-fix">Fixed</span> Filter buttons now work correctly on main feed</li>
+                    <li><span class="tag tag-fix">Fixed</span> Status page database check now properly shows connected state</li>
+                </ul>
             </div>
 
             <div class="changelog-entry">

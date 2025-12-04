@@ -94,6 +94,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/x/paste/:id", delete(handlers::admin_delete_paste))
         .route("/api/x/comment/:id", delete(handlers::admin_delete_comment))
         .route("/api/x/source/:name", delete(handlers::admin_purge_source))
+        // Admin analytics endpoints
+        .route("/api/x/analytics", get(handlers::admin_analytics))
+        .route("/api/x/activity", get(handlers::admin_activity_logs))
+        .route("/api/x/activity/counts", get(handlers::admin_activity_counts))
         // Admin panel page (hidden)
         .route("/x", get(handlers::serve_admin))
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB limit

@@ -100,6 +100,8 @@ pub struct SourcesConfig {
     pub quickpaste: bool,
     #[serde(default)]
     pub psbdmp: bool,
+    #[serde(default)]
+    pub tor_pastes: bool,
 }
 
 impl SourcesConfig {
@@ -180,6 +182,9 @@ impl SourcesConfig {
         }
         if self.psbdmp {
             sources.push("psbdmp");
+        }
+        if self.tor_pastes {
+            sources.push("tor_pastes");
         }
         sources
     }
