@@ -305,10 +305,12 @@ pub async fn statistics(
         .get_sensitive_paste_count()
         .map_err(|e| ApiError(format!("Failed to get sensitive paste count: {}", e)))?;
 
-    // Get counts by source (all 13 scrapers + web uploads)
+    // Get counts by source (all scrapers + web uploads)
     let sources = vec![
         "pastebin",
         "gists",
+        "ideone",
+        "codepad",
         "paste_ee",
         "rentry",
         "ghostbin",
@@ -319,6 +321,16 @@ pub async fn statistics(
         "ixio",
         "justpaste",
         "controlc",
+        "bpaste",
+        "termbin",
+        "sprunge",
+        "paste_rs",
+        "paste2",
+        "pastebin_pl",
+        "quickpaste",
+        "pastecode",
+        "dpaste_org",
+        "defuse",
         "external",
         "external_url",
         "web",
