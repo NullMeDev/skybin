@@ -1,0 +1,31 @@
+[telegram]
+# Get these from https://my.telegram.org/apps
+api_id = 12345678
+api_hash = "your_api_hash_here"
+phone = "+1234567890"
+session_file = "telegram.session"
+
+[skybin]
+api_url = "http://127.0.0.1:3000"
+check_duplicates = true
+
+[scraper]
+# HTTP stats server port
+stats_port = 9877
+# Max size for individual files inside archives (MB)
+max_file_size_mb = 5
+# Max archive size to download (MB)
+max_archive_size_mb = 100
+# Delay between posts (ms)
+rate_limit_delay_ms = 500
+# Max flood wait time (seconds)
+backoff_max_seconds = 300
+
+# Channels to join and monitor (usernames or invite hashes)
+# For invite links like t.me/+AbCdEfG, use just the hash: "AbCdEfG"
+# For public channels, use the username without @
+channels = [
+    "leaboratory",
+    "securitydatabase",
+    # Add more channels here
+]

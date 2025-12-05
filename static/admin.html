@@ -114,6 +114,7 @@
         <div class="tabs">
             <div class="tab active" onclick="showTab('overview')">📊 Overview</div>
             <div class="tab" onclick="showTab('analytics')">📈 Analytics</div>
+            <div class="tab" onclick="showTab('telegram')">📱 Telegram</div>
             <div class="tab" onclick="showTab('pastes')">📝 Pastes</div>
             <div class="tab" onclick="showTab('activity')">📋 Activity</div>
         </div>
@@ -185,6 +186,59 @@
                     <h3>🎯 Pattern Hits</h3>
                     <div id="pattern-hits">
                         <p style="color: #888;">Loading...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Telegram Tab -->
+        <div id="tab-telegram" class="tab-content">
+            <div class="stats" id="telegram-stats">
+                <div class="stat-card">
+                    <h3 id="tg-files-processed">-</h3>
+                    <p>Files Processed</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="tg-files-posted">-</h3>
+                    <p>Posted to SkyBin</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="tg-duplicates">-</h3>
+                    <p>Duplicates Skipped</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="tg-channels">-</h3>
+                    <p>Channels Monitored</p>
+                </div>
+            </div>
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <h3>📊 Scraper Status</h3>
+                    <div id="tg-status">
+                        <p style="color: #888;">Loading...</p>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h3>📡 Channel Stats</h3>
+                    <div id="tg-channel-stats" style="max-height: 300px; overflow-y: auto;">
+                        <p style="color: #888;">Loading...</p>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <h3>❌ Recent Errors</h3>
+                    <div id="tg-errors" style="max-height: 300px; overflow-y: auto;">
+                        <p style="color: #888;">No errors</p>
+                    </div>
+                </div>
+            </div>
+            <div class="section" style="margin: 2rem;">
+                <div class="section-header">
+                    <h2>Add Telegram Invite</h2>
+                </div>
+                <div class="section-body">
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input id="tgInvite" type="text" placeholder="t.me/+hash or @username" style="flex: 1; padding: 8px; background: #0a0a0a; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                        <button onclick="sendTgInvite()" style="padding: 8px 16px; background: #00ff88; color: #000; border: none; border-radius: 4px; cursor: pointer;">Send to Scraper</button>
                     </div>
                 </div>
             </div>
@@ -524,6 +578,7 @@
             if (tabName === 'analytics') loadAnalytics();
             if (tabName === 'activity') loadActivityLogs();
             if (tabName === 'pastes') loadPastes();
+            if (tabName === 'telegram') loadTelegramStats();
         }
 
         function loadAll() {
@@ -748,6 +803,96 @@
                 }
             } catch (e) {
                 showToast('Failed to load activity logs', true);
+            }
+        }
+
+        // Telegram scraper functions
+        async function loadTelegramStats() {
+            const statusEl = document.getElementById('tg-status');
+            try {
+                // Try to connect to scraper directly (port 9877)
+                const res = await fetch('http://127.0.0.1:9877/stats', { timeout: 3000 });
+                const data = await res.json();
+                if (data.success && data.data) {
+                    const s = data.data;
+                    document.getElementById('tg-files-processed').textContent = s.files_processed || 0;
+                    document.getElementById('tg-files-posted').textContent = s.files_posted || 0;
+                    document.getElementById('tg-duplicates').textContent = s.files_skipped_duplicate || 0;
+                    document.getElementById('tg-channels').textContent = s.channels_monitored || 0;
+                    
+                    // Status info
+                    const uptime = formatUptime(s.uptime_seconds);
+                    statusEl.innerHTML = `
+                        <div style="display: grid; gap: 8px;">
+                            <div><strong>Status:</strong> <span style="color: #00ff88;">Online</span></div>
+                            <div><strong>Uptime:</strong> ${uptime}</div>
+                            <div><strong>Messages Received:</strong> ${s.messages_received || 0}</div>
+                            <div><strong>Archives Extracted:</strong> ${s.archives_extracted || 0}</div>
+                            <div><strong>Flood Waits:</strong> ${s.flood_waits || 0}</div>
+                            <div><strong>Errors:</strong> ${s.errors || 0}</div>
+                        </div>
+                    `;
+                    
+                    // Channel stats
+                    const channelStats = document.getElementById('tg-channel-stats');
+                    if (s.channel_stats && s.channel_stats.length > 0) {
+                        channelStats.innerHTML = s.channel_stats.map(c => `
+                            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #222;">
+                                <span>${escapeHtml(c.name)}</span>
+                                <span style="color: #888;">${c.files_posted}/${c.files_received}</span>
+                            </div>
+                        `).join('');
+                    } else {
+                        channelStats.innerHTML = '<p style="color: #888;">No channel activity yet</p>';
+                    }
+                    
+                    // Errors
+                    const errorsEl = document.getElementById('tg-errors');
+                    if (s.recent_errors && s.recent_errors.length > 0) {
+                        errorsEl.innerHTML = s.recent_errors.map(e => `
+                            <div style="padding: 4px 0; border-bottom: 1px solid #222; font-size: 0.85rem;">
+                                <span style="color: #ff4444;">${escapeHtml(e.message)}</span>
+                                ${e.context ? `<span style="color: #666;"> (${escapeHtml(e.context)})</span>` : ''}
+                            </div>
+                        `).join('');
+                    } else {
+                        errorsEl.innerHTML = '<p style="color: #888;">No errors</p>';
+                    }
+                }
+            } catch (e) {
+                statusEl.innerHTML = '<p style="color: #ff4444;">Scraper offline or unreachable</p>';
+                document.getElementById('tg-channel-stats').innerHTML = '<p style="color: #888;">-</p>';
+            }
+        }
+        
+        function formatUptime(seconds) {
+            if (!seconds) return '-';
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            if (days > 0) return `${days}d ${hours}h ${mins}m`;
+            if (hours > 0) return `${hours}h ${mins}m`;
+            return `${mins}m`;
+        }
+        
+        async function sendTgInvite() {
+            const invite = document.getElementById('tgInvite').value.trim();
+            if (!invite) { showToast('Enter invite link or username', true); return; }
+            try {
+                const res = await fetch('/api/x/telegram-invite', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ invite })
+                });
+                const data = await res.json();
+                if (data.success && data.data.forwarded) {
+                    showToast('Invite sent to scraper');
+                    document.getElementById('tgInvite').value = '';
+                } else {
+                    showToast(data.data?.message || 'Failed to forward invite', true);
+                }
+            } catch (e) {
+                showToast('Error sending invite', true);
             }
         }
 

@@ -25,3 +25,4 @@ Thumbs.db
 
 # Runtime
 pastevault.db*
+telegram-scraper-rs/target/

@@ -1100,3 +1100,78 @@ pub async fn admin_delete_by_search(
     
     Ok(Json(ApiResponse::ok(BulkDeleteResponse { deleted })))
 }
+
+// =====================
+// Telegram Scraper API
+// =====================
+
+#[derive(Debug, Serialize)]
+pub struct HashCheckResponse {
+    pub exists: bool,
+}
+
+/// GET /api/check-hash/:hash - Check if a content hash already exists (for deduplication)
+pub async fn check_hash(
+    State(state): State<AppState>,
+    Path(hash): Path<String>,
+) -> Result<Json<ApiResponse<HashCheckResponse>>, ApiError> {
+    let db = state.db.lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+    
+    let exists = db.check_hash_exists(&hash)
+        .map_err(|e| ApiError(format!("Failed to check hash: {}", e)))?;
+    
+    Ok(Json(ApiResponse::ok(HashCheckResponse { exists })))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TelegramInviteRequest {
+    pub invite: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TelegramInviteResponse {
+    pub forwarded: bool,
+    pub message: String,
+}
+
+/// POST /api/x/telegram-invite - Forward a telegram invite link to the scraper
+pub async fn forward_telegram_invite(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<TelegramInviteRequest>,
+) -> Result<Json<ApiResponse<TelegramInviteResponse>>, ApiError> {
+    verify_admin(&state, &headers)?;
+    
+    // Forward to telegram scraper's /invite endpoint
+    // Scraper runs on port 9877 by default
+    let client = reqwest::Client::new();
+    let scraper_url = std::env::var("TELEGRAM_SCRAPER_URL")
+        .unwrap_or_else(|_| "http://127.0.0.1:9877".to_string());
+    
+    match client.post(format!("{}/invite", scraper_url))
+        .json(&serde_json::json!({ "invite": payload.invite }))
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => {
+            Ok(Json(ApiResponse::ok(TelegramInviteResponse {
+                forwarded: true,
+                message: "Invite forwarded to scraper".to_string(),
+            })))
+        }
+        Ok(resp) => {
+            Ok(Json(ApiResponse::ok(TelegramInviteResponse {
+                forwarded: false,
+                message: format!("Scraper returned: {}", resp.status()),
+            })))
+        }
+        Err(e) => {
+            Ok(Json(ApiResponse::ok(TelegramInviteResponse {
+                forwarded: false,
+                message: format!("Could not reach scraper: {}", e),
+            })))
+        }
+    }
+}

@@ -1,0 +1,24 @@
+[Unit]
+Description=SkyBin Telegram Scraper (Rust)
+After=network.target skybin.service
+Wants=skybin.service
+
+[Service]
+Type=simple
+User=nulladmin
+Group=nulladmin
+WorkingDirectory=/opt/skybin/telegram-scraper-rs
+ExecStart=/opt/skybin/telegram-scraper-rs/telegram-scraper
+Restart=always
+RestartSec=10
+Environment=RUST_LOG=info
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/skybin/telegram-scraper-rs
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

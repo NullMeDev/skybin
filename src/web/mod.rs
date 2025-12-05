@@ -87,6 +87,10 @@ pub fn create_router(state: AppState) -> Router {
         // Export
         .route("/api/export/:id/json", get(handlers::export_json))
         .route("/api/export/:id/csv", get(handlers::export_csv))
+        // Deduplication check for telegram scraper
+        .route("/api/check-hash/:hash", get(handlers::check_hash))
+        // Forward telegram invites to scraper
+        .route("/api/x/telegram-invite", post(handlers::forward_telegram_invite))
         // Admin API (hidden, token-protected)
         .route("/api/x/login", post(handlers::admin_login))
         .route("/api/x/logout", post(handlers::admin_logout))

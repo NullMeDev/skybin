@@ -824,6 +824,15 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         )?;
         Ok(count)
     }
+
+    /// Check if a content hash already exists (for deduplication)
+    pub fn check_hash_exists(&self, hash: &str) -> Result<bool> {
+        let mut stmt = self.conn.prepare(
+            "SELECT 1 FROM pastes WHERE content_hash = ? LIMIT 1",
+        )?;
+        let exists = stmt.exists(params![hash])?;
+        Ok(exists)
+    }
 }
 
 #[cfg(test)]
