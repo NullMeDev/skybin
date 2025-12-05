@@ -575,24 +575,9 @@ class TelegramScraper:
         password_files = ['passwords.txt', 'password.txt', 'pass.txt', 'pwd.txt', 'logins.txt']
         return basename in password_files
     
-    def _is_brutelogs_archive(self, filename: str, file_list: list) -> bool:
-        """Check if archive appears to be BruteLogs based on filename or contents"""
-        lower = filename.lower()
-        # Check filename for known BruteLogs/stealer log markers
-        brutelogs_markers = ['brute', 'brutelogs', '[tg]', '.boxed.pw', 'boxed.pw', 'stealerlogs', 'stealer_logs']
-        if any(marker in lower for marker in brutelogs_markers):
-            return True
-        # Check if any file path contains brutelogs marker
-        for f in file_list:
-            f_lower = f.lower()
-            if any(marker in f_lower for marker in brutelogs_markers):
-                return True
-        return False
-    
-    def _generate_brutelogs_title(self, content: str, archive_name: str, inner_path: str) -> str:
-        """Generate meaningful title for BruteLogs password files"""
-        # Try to extract meaningful info from path and content
-        parts = ["[TG] Stealer Logs"]
+    def _generate_password_file_title(self, content: str, archive_name: str, channel_name: str) -> str:
+        """Generate meaningful title for password files extracted from archives"""
+        parts = [f"[TG] {channel_name}"]
         
         # Count credentials for title
         email_pass_count = len(re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@:]{4,}', content))
@@ -624,15 +609,16 @@ class TelegramScraper:
         elif ulp_count > 0:
             parts.append(f"{ulp_count} URL:Login:Pass")
         elif line_count > 10:
-            parts.append(f"{line_count} entries")
+            parts.append(f"{line_count} lines")
         
         return " - ".join(parts)[:100]
     
     async def extract_text_from_archive(self, buffer: io.BytesIO, filename: str, channel_name: str) -> int:
         """
-        Extract text files from a zip/rar archive and post them.
-        For BruteLogs archives, ONLY extract password files (passwords.txt, etc.)
-        Returns number of files processed.
+        Extract password files from a zip/rar archive and post them.
+        ONLY extracts password files (passwords.txt, Passwords.txt, etc.)
+        If no password file found, nothing is posted.
+        Returns number of password files processed.
         """
         processed = 0
         lower_filename = filename.lower()
@@ -641,29 +627,17 @@ class TelegramScraper:
             if lower_filename.endswith('.zip'):
                 buffer.seek(0)
                 with zipfile.ZipFile(buffer, 'r') as zf:
-                    # Get file list to check if this is BruteLogs
-                    all_files = [info.filename for info in zf.infolist()]
-                    is_brutelogs = self._is_brutelogs_archive(filename, all_files)
-                    
-                    # Find password files if BruteLogs
-                    password_files = [f for f in all_files if self._is_password_file(f)] if is_brutelogs else []
-                    
+                    # Scan ALL files in archive looking for password files
                     for info in zf.infolist():
                         # Skip directories and large files
                         if info.is_dir() or info.file_size > MAX_FILE_SIZE:
                             continue
                         
-                        inner_name = info.filename.lower()
+                        # ONLY process password files
+                        if not self._is_password_file(info.filename):
+                            continue
                         
-                        # For BruteLogs: ONLY process password files
-                        if is_brutelogs:
-                            if not self._is_password_file(info.filename):
-                                continue
-                            logger.info(f"    🔑 Found password file: {info.filename}")
-                        else:
-                            # Regular archive: only extract text-like files
-                            if not any(inner_name.endswith(ext) for ext in CRED_FILE_EXTENSIONS):
-                                continue
+                        logger.info(f"    🔑 Found password file: {info.filename}")
                         
                         try:
                             data = zf.read(info.filename)
@@ -672,16 +646,12 @@ class TelegramScraper:
                             except:
                                 content = data.decode('latin-1', errors='ignore')
                             
-                            if is_leak_content(content) or len(content) > 100:
-                                # Generate title based on archive type
-                                if is_brutelogs:
-                                    title = self._generate_brutelogs_title(content, filename, info.filename)
-                                else:
-                                    title = generate_auto_title(content, f"{channel_name}/{filename}")
-                                
+                            # Only post if it has meaningful content
+                            if len(content.strip()) > 50:
+                                title = self._generate_password_file_title(content, filename, channel_name)
                                 await self.post_queue.put((content, title))
                                 processed += 1
-                                logger.info(f"    📄 Extracted: {info.filename}")
+                                logger.info(f"    📄 Posted password file: {info.filename}")
                         except Exception as e:
                             logger.debug(f"    Error extracting {info.filename}: {e}")
             
@@ -699,26 +669,17 @@ class TelegramScraper:
                     buffer.truncate(0)
                     
                     with rarfile.RarFile(tmp_path, 'r') as rf:
-                        # Get file list to check if this is BruteLogs
-                        all_files = [info.filename for info in rf.infolist()]
-                        is_brutelogs = self._is_brutelogs_archive(filename, all_files)
-                        
+                        # Scan ALL files in archive looking for password files
                         for info in rf.infolist():
                             # Skip directories and large files
                             if info.is_dir() or info.file_size > MAX_FILE_SIZE:
                                 continue
                             
-                            inner_name = info.filename.lower()
+                            # ONLY process password files
+                            if not self._is_password_file(info.filename):
+                                continue
                             
-                            # For BruteLogs: ONLY process password files
-                            if is_brutelogs:
-                                if not self._is_password_file(info.filename):
-                                    continue
-                                logger.info(f"    🔑 Found password file: {info.filename}")
-                            else:
-                                # Regular archive: only extract text-like files
-                                if not any(inner_name.endswith(ext) for ext in CRED_FILE_EXTENSIONS):
-                                    continue
+                            logger.info(f"    🔑 Found password file: {info.filename}")
                             
                             try:
                                 data = rf.read(info.filename)
@@ -727,16 +688,12 @@ class TelegramScraper:
                                 except:
                                     content = data.decode('latin-1', errors='ignore')
                                 
-                                if is_leak_content(content) or len(content) > 100:
-                                    # Generate title based on archive type
-                                    if is_brutelogs:
-                                        title = self._generate_brutelogs_title(content, filename, info.filename)
-                                    else:
-                                        title = generate_auto_title(content, f"{channel_name}/{filename}")
-                                    
+                                # Only post if it has meaningful content
+                                if len(content.strip()) > 50:
+                                    title = self._generate_password_file_title(content, filename, channel_name)
                                     await self.post_queue.put((content, title))
                                     processed += 1
-                                    logger.info(f"    📄 Extracted: {info.filename}")
+                                    logger.info(f"    📄 Posted password file: {info.filename}")
                             except Exception as e:
                                 logger.debug(f"    Error extracting {info.filename}: {e}")
                 finally:
@@ -747,6 +704,9 @@ class TelegramScraper:
             
             elif lower_filename.endswith('.rar') and not HAS_RARFILE:
                 logger.warning(f"  Cannot extract .rar - rarfile not installed")
+            
+            if processed == 0:
+                logger.debug(f"    No password files found in {filename}")
                 
         except Exception as e:
             logger.error(f"  Error extracting archive {filename}: {e}")
