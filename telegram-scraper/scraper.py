@@ -578,12 +578,14 @@ class TelegramScraper:
     def _is_brutelogs_archive(self, filename: str, file_list: list) -> bool:
         """Check if archive appears to be BruteLogs based on filename or contents"""
         lower = filename.lower()
-        # Check filename
-        if 'brute' in lower or 'brutelogs' in lower or '[tg]' in lower:
+        # Check filename for known BruteLogs/stealer log markers
+        brutelogs_markers = ['brute', 'brutelogs', '[tg]', '.boxed.pw', 'boxed.pw', 'stealerlogs', 'stealer_logs']
+        if any(marker in lower for marker in brutelogs_markers):
             return True
         # Check if any file path contains brutelogs marker
         for f in file_list:
-            if 'brute' in f.lower() or 'brutelogs' in f.lower():
+            f_lower = f.lower()
+            if any(marker in f_lower for marker in brutelogs_markers):
                 return True
         return False
     

@@ -416,7 +416,7 @@
             }
         }
 
-        function prevPage()
+        function prevPage() { if (currentPage > 0) { currentPage--; loadPastes(); } }
         function nextPage() { currentPage++; loadPastes(); }
 
         function formatDate(ts) {
