@@ -56,7 +56,7 @@
 <body>
     <nav>
         <div class="container">
-            <a href="/" class="logo">SkyBin <span>v1.6.2</span></a>
+            <a href="/" class="logo">SkyBin <span>v2.1.0</span></a>
             <ul class="nav-links">
                 <li><a href="/">Feed</a></li>
                 <li><a href="/search">Search</a></li>
@@ -77,39 +77,50 @@
 
             <div class="changelog-entry">
                 <h3>
-                    <span class="version">v1.6.2</span>
-                    🔧 Admin Bulk Delete Controls
+                    <span class="version">v2.1.0</span>
+                    🔐 Secret Extraction Pipeline
                 </h3>
                 <div class="date">December 5, 2025</div>
                 <ul>
-                    <li><span class="tag tag-feature">New</span> Admin bulk delete: Delete ALL pastes at once</li>
-                    <li><span class="tag tag-feature">New</span> Admin bulk delete: Delete pastes older than N days</li>
-                    <li><span class="tag tag-feature">New</span> Admin bulk delete: Purge by source (dropdown with all sources)</li>
-                    <li><span class="tag tag-feature">New</span> Admin bulk delete: Delete pastes matching search query</li>
-                    <li><span class="tag tag-feature">New</span> API endpoints: /api/x/all, /api/x/older-than/:days, /api/x/sources, /api/x/delete-by-search</li>
-                    <li><span class="tag tag-fix">Fixed</span> Removed paste size limit - now accepts pastes up to 100MB</li>
-                    <li><span class="tag tag-fix">Fixed</span> Duplicate paste handling, FTS5 search, Telegram BruteLogs extraction</li>
+                    <li><span class="tag tag-feature">New</span> Secret extraction pipeline with 35+ categories and 80+ regex patterns</li>
+                    <li><span class="tag tag-feature">New</span> Per-secret deduplication - SHA256(type+value) prevents duplicate processing</li>
+                    <li><span class="tag tag-feature">New</span> Categorized output files - AWS_Keys.txt, Discord_Tokens.txt, Email_Pass_Combos.txt, etc.</li>
+                    <li><span class="tag tag-feature">New</span> Server secret exclusion via .excluded_secrets file</li>
+                    <li><span class="tag tag-feature">New</span> Rust secret_extractor.rs module for unified extraction</li>
+                    <li><span class="tag tag-feature">New</span> Python credential_extractor.py for Telegram scraper</li>
+                    <li><span class="tag tag-feature">New</span> seen_secrets database table for deduplication tracking</li>
+                    <li><span class="tag tag-security">Security</span> Auto-excludes environment variable secrets from output</li>
                 </ul>
             </div>
 
             <div class="changelog-entry">
                 <h3>
-                    <span class="version">v1.5.0</span>
-                    📦 Telegram Archive Extraction & Enhanced Filtering
+                    <span class="version">v2.0.0</span>
+                    🦀 Rust Telegram Scraper Rewrite
                 </h3>
-                <div class="date">December 4, 2025</div>
+                <div class="date">December 5, 2025</div>
                 <ul>
-                    <li><span class="tag tag-feature">New</span> Archive extraction - downloads and extracts .zip/.rar files up to 5GB from Telegram channels</li>
-                    <li><span class="tag tag-feature">New</span> File download support - .txt, .csv, .json, .sql, .log, .env files from channels like .boxed.pw</li>
-                    <li><span class="tag tag-feature">New</span> Auto-title generation based on content analysis (service detection, format type, combo count)</li>
-                    <li><span class="tag tag-feature">New</span> Telegram source filter button on main feed</li>
-                    <li><span class="tag tag-feature">New</span> Pattern-based BIN detection (requires actual card numbers, not just keywords)</li>
-                    <li><span class="tag tag-perf">Improved</span> 5 concurrent file downloads (was 2) with temp file cleanup</li>
-                    <li><span class="tag tag-perf">Improved</span> Silent page refresh - no loading flicker on auto-refresh</li>
-                    <li><span class="tag tag-perf">Improved</span> Downloads to temp → extracts text → posts → deletes (no disk bloat)</li>
-                    <li><span class="tag tag-fix">Fixed</span> Stripe checkout links filtered (checkout.stripe.com, buy.stripe.com) but API keys allowed</li>
-                    <li><span class="tag tag-fix">Fixed</span> BIN false positives - removed keyword triggers, now requires actual card patterns</li>
-                    <li><span class="tag tag-fix">Fixed</span> Disabled broken scrapers: psbdmp, tor_pastes, stronghold, deepaste, ix.io</li>
+                    <li><span class="tag tag-feature">New</span> Complete rewrite of Telegram scraper from Python to Rust</li>
+                    <li><span class="tag tag-perf">Improved</span> Unified codebase - all scrapers now in Rust</li>
+                    <li><span class="tag tag-perf">Improved</span> Better error handling and resilience</li>
+                    <li><span class="tag tag-perf">Improved</span> Significant performance improvements</li>
+                </ul>
+            </div>
+
+            <div class="changelog-entry">
+                <h3>
+                    <span class="version">v1.6.x</span>
+                    🔧 Admin Controls & Security
+                </h3>
+                <div class="date">December 4-5, 2025</div>
+                <ul>
+                    <li><span class="tag tag-feature">New</span> Admin bulk delete: Delete ALL, by age, by source, by search query</li>
+                    <li><span class="tag tag-feature">New</span> Archive extraction from Telegram channels (.zip/.rar up to 5GB)</li>
+                    <li><span class="tag tag-security">Security</span> CSP headers, X-Frame-Options, rate limiting</li>
+                    <li><span class="tag tag-security">Security</span> 24-hour admin session expiration</li>
+                    <li><span class="tag tag-fix">Fixed</span> Removed paste size limit - now accepts up to 100MB</li>
+                    <li><span class="tag tag-fix">Fixed</span> Admin panel JavaScript issues</li>
+                    <li><span class="tag tag-fix">Fixed</span> BruteLogs .boxed.pw detection</li>
                 </ul>
             </div>
 
