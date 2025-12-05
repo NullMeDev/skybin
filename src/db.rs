@@ -188,6 +188,22 @@ CREATE TABLE IF NOT EXISTS activity_logs (
     timestamp INTEGER NOT NULL
 );
 
+-- Seen secrets for per-secret deduplication
+-- hash is SHA256 of (secret_type + secret_value)
+CREATE TABLE IF NOT EXISTS seen_secrets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    secret_hash TEXT NOT NULL UNIQUE,
+    secret_type TEXT NOT NULL,
+    first_seen INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL,
+    occurrence_count INTEGER DEFAULT 1,
+    source TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_seen_secrets_hash ON seen_secrets(secret_hash);
+CREATE INDEX IF NOT EXISTS idx_seen_secrets_type ON seen_secrets(secret_type);
+CREATE INDEX IF NOT EXISTS idx_seen_secrets_first_seen ON seen_secrets(first_seen);
+
 CREATE INDEX IF NOT EXISTS idx_activity_logs_timestamp ON activity_logs(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_activity_logs_action ON activity_logs(action);
 

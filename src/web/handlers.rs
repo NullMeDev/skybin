@@ -236,6 +236,11 @@ pub async fn upload_paste_json(
     use chrono::Utc;
     use uuid::Uuid;
 
+    // Rate limit check (use "global" key since we don't track IPs for anonymity)
+    if !state.rate_limiters.upload.check("global") {
+        return Err(ApiError("Rate limit exceeded. Try again later.".to_string()));
+    }
+
     let mut db = state
         .db
         .lock()
@@ -319,6 +324,11 @@ pub async fn search_api(
     State(state): State<AppState>,
     Query(filters): Query<SearchFilters>,
 ) -> Result<Json<ApiResponse<Vec<PasteListItem>>>, ApiError> {
+    // Rate limit check
+    if !state.rate_limiters.search.check("global") {
+        return Err(ApiError("Rate limit exceeded. Try again later.".to_string()));
+    }
+
     let mut db = state
         .db
         .lock()
@@ -477,6 +487,11 @@ pub async fn add_comment(
     use chrono::Utc;
     use uuid::Uuid;
 
+    // Rate limit check
+    if !state.rate_limiters.comments.check("global") {
+        return Err(ApiError("Rate limit exceeded. Try again later.".to_string()));
+    }
+
     // Validate content
     let content = payload.content.trim();
     if content.is_empty() {
@@ -620,6 +635,11 @@ pub async fn submit_url(
     State(state): State<AppState>,
     Json(payload): Json<SubmitUrlRequest>,
 ) -> Result<(StatusCode, Json<ApiResponse<SubmitUrlResponse>>), ApiError> {
+    // Rate limit check
+    if !state.rate_limiters.submit_url.check("global") {
+        return Err(ApiError("Rate limit exceeded. Try again later.".to_string()));
+    }
+
     let scraper = state
         .url_scraper
         .as_ref()
@@ -697,6 +717,11 @@ pub async fn admin_login(
     State(state): State<AppState>,
     Json(payload): Json<AdminLoginRequest>,
 ) -> Result<Json<ApiResponse<AdminLoginResponse>>, ApiError> {
+    // Rate limit check (anti-brute-force)
+    if !state.rate_limiters.admin_login.check("global") {
+        return Err(ApiError("Too many login attempts. Try again later.".to_string()));
+    }
+
     let admin = state.admin.as_ref()
         .ok_or_else(|| ApiError("Admin not configured".to_string()))?;
     

@@ -1,5 +1,6 @@
 use super::credential_filter::contains_credentials;
 use super::traits::{Scraper, ScraperResult};
+use crate::credential_summary::prepend_summary;
 use crate::models::DiscoveredPaste;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -146,12 +147,14 @@ impl Scraper for GitHubGistsScraper {
                     continue;
                 }
 
-                let paste = DiscoveredPaste::new("gists", &gist.id, content)
-                    .with_title(
-                        gist.description
-                            .clone()
-                            .unwrap_or_else(|| format!("Gist: {}", filename)),
-                    )
+                // Generate credential summary and prepend to content
+                let fallback_title = gist.description
+                    .clone()
+                    .unwrap_or_else(|| format!("Gist: {}", filename));
+                let (summary_title, summarized_content) = prepend_summary(&content, &fallback_title);
+
+                let paste = DiscoveredPaste::new("gists", &gist.id, summarized_content)
+                    .with_title(summary_title)
                     .with_url(gist.url.clone())
                     .with_syntax(file.language.clone().unwrap_or_else(|| "text".to_string()))
                     .with_created_at(

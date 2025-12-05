@@ -2,7 +2,7 @@ use paste_vault::admin::AdminAuth;
 use paste_vault::config::Config;
 use paste_vault::db::Database;
 use paste_vault::patterns::PatternDetector;
-use paste_vault::rate_limiter::SourceRateLimiter;
+use paste_vault::rate_limiter::{ApiRateLimiters, SourceRateLimiter};
 use paste_vault::scheduler::Scheduler;
 use paste_vault::scrapers::traits::Scraper;
 use paste_vault::scrapers::{
@@ -243,11 +243,16 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
+    // Initialize API rate limiters
+    let rate_limiters = Arc::new(ApiRateLimiters::new());
+    println!("✓ API rate limiters initialized");
+
     // Create web server state
     let app_state = AppState {
         db: db.clone(),
         url_scraper: Some(external_scraper),
         admin,
+        rate_limiters,
     };
     println!("✓ Web server state created");
 

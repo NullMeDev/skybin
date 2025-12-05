@@ -1,22 +1,28 @@
-# SkyBin v1.5.0
+# SkyBin v2.1.0
 
 Paste aggregator that monitors public paste sites and Telegram stealer log channels for leaked credentials, API keys, and sensitive data.
 
 **Live:** https://skybin.lol | https://bin.nullme.lol
 
-## What's New in v1.5.0
+## What's New in v2.1.0
 
-- **40+ Telegram channels** - monitors stealer log clouds (Daisy, Bugatti, Cuckoo, Moon, StarLink, etc.)
-- **Expanded detection** - 50+ leak keywords, platform-specific token patterns
-- **Lowered thresholds** - accepts single credentials (was 5+ email:pass, now 1+)
-- **Keyword filtering** - 3+ leak keywords triggers acceptance
-- **Sources research** - integrated findings from SOCRadar, KELA, Group-IB
+- **Secret Extraction Pipeline** - 35+ secret categories with 80+ regex patterns
+- **Per-secret deduplication** - SHA256(type+value) prevents duplicate processing
+- **Categorized output files** - AWS_Keys.txt, Discord_Tokens.txt, Email_Pass_Combos.txt, etc.
+- **Server secret exclusion** - `.excluded_secrets` file prevents broadcasting your own secrets
+- **Rust `secret_extractor` module** - unified extraction across all scrapers
+
+### Previous Highlights (v2.0.0)
+- **Rust Telegram Scraper** - complete rewrite from Python for performance
+- **40+ Telegram channels** - stealer log clouds (Daisy, Bugatti, Cuckoo, StarLink, etc.)
+- **Security hardening** - CSP headers, rate limiting, 24hr session expiry
 
 ## Features
 
+- **Secret extraction pipeline** with 35+ categories and deduplication
 - **Telegram scraper** with 40+ stealer log channels
 - Scrapes 24+ paste sites every 30 seconds
-- 50+ detection patterns for credentials, tokens, API keys
+- 80+ detection patterns for credentials, tokens, API keys
 - Smart auto-titling (identifies Disney+, Netflix, Spotify logins, etc.)
 - **Anonymous comments** on pastes - no login required
 - **Export to JSON/CSV** for offline analysis

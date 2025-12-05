@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
 """
-SkyBin Telegram Scraper Service v2.4
-- Auto-discovers leak channels from your dialogs
-- Joins known active channels
-- Monitors all channels/groups you're in
-- Downloads .txt/.csv/.json/.sql/.log/.env files
-- Extracts text from .zip and .rar archives (up to 500MB)
-- Downloads to temp, extracts, then deletes - no disk bloat
-- Filters Stripe checkout URLs (allows API keys)
-- Pattern-based BIN detection (not keyword-based)
-- Auto-generates titles based on content analysis
-- Startup cleanup of orphaned temp files
-- Download timeout protection (10 min max)
-- Posts found leaks incrementally to SkyBin API
+SkyBin Telegram Scraper Service v2.7
+
+Features:
+- Multi-worker parallel pipeline (download/extract/post concurrent)
+- Credential summary extraction with count-based titles
+- External file host support (gofile, pixeldrain, mega, mediafire, etc)
+- Archive extraction (zip/rar) - password files only
+- Strict credential detection (no keyword-only matching)
+- Real-time channel monitoring + historical scraping
+- Rate limit compliance (Telegram, external hosts)
 """
 
 import asyncio
@@ -50,6 +47,18 @@ from telethon.errors import (
 
 # Load .env file
 load_dotenv()
+
+# Import our credential extractor for categorized extraction and deduplication
+try:
+    from credential_extractor import (
+        extract_and_save,
+        extract_credential_summary as new_extract_credential_summary,
+        get_extractor
+    )
+    HAS_CREDENTIAL_EXTRACTOR = True
+except ImportError:
+    HAS_CREDENTIAL_EXTRACTOR = False
+    logging.warning("credential_extractor not found - using legacy extraction")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -169,6 +178,46 @@ CRED_FILE_EXTENSIONS = ['.txt', '.csv', '.json', '.sql', '.log', '.env']
 # Archive extensions (will be extracted)
 ARCHIVE_EXTENSIONS = ['.zip', '.rar']
 
+# Password file patterns (case-insensitive) - ONLY extract these from archives
+PASSWORD_FILE_PATTERNS = [
+    'passwords.txt', 'password.txt', 'pass.txt', 'pwd.txt',
+    'logins.txt', 'credentials.txt', 'combo.txt', 'accounts.txt',
+    'all passwords.txt', 'all_passwords.txt', 'allpasswords.txt',
+    'passwords', 'password', 'logins', 'credentials',
+]
+
+# External file host patterns - extract download links from messages
+FILE_HOST_PATTERNS = [
+    # Gofile
+    re.compile(r'https?://(?:www\.)?gofile\.io/d/([a-zA-Z0-9]+)'),
+    # Pixeldrain
+    re.compile(r'https?://(?:www\.)?pixeldrain\.com/(?:u|l)/([a-zA-Z0-9]+)'),
+    # Mega.nz
+    re.compile(r'https?://mega\.nz/(?:file|folder)/([a-zA-Z0-9_-]+)(?:#([a-zA-Z0-9_-]+))?'),
+    # MediaFire
+    re.compile(r'https?://(?:www\.)?mediafire\.com/file/([a-zA-Z0-9]+)/([^/\s]+)'),
+    # Catbox
+    re.compile(r'https?://files\.catbox\.moe/([a-zA-Z0-9]+\.[a-z]+)'),
+    # Litterbox
+    re.compile(r'https?://litter\.catbox\.moe/([a-zA-Z0-9]+\.[a-z]+)'),
+    # Krakenfiles
+    re.compile(r'https?://(?:www\.)?krakenfiles\.com/view/([a-zA-Z0-9]+)'),
+    # Workupload
+    re.compile(r'https?://workupload\.com/file/([a-zA-Z0-9]+)'),
+    # Buzzheavier
+    re.compile(r'https?://buzzheavier\.com/([a-zA-Z0-9]+)'),
+    # 1fichier
+    re.compile(r'https?://1fichier\.com/\?([a-zA-Z0-9]+)'),
+    # Uploadhaven
+    re.compile(r'https?://uploadhaven\.com/download/([a-zA-Z0-9]+)'),
+    # Sendspace
+    re.compile(r'https?://(?:www\.)?sendspace\.com/file/([a-zA-Z0-9]+)'),
+    # Zippyshare replacements
+    re.compile(r'https?://(?:www\.)?(send\.cm|send-cm\.com)/([a-zA-Z0-9]+)'),
+    # Generic direct download links (archives)
+    re.compile(r'https?://[^\s]+\.(zip|rar|7z|tar\.gz)(?:\?[^\s]*)?'),
+]
+
 # Max file size for regular files (5MB)
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
@@ -179,8 +228,17 @@ MAX_ARCHIVE_SIZE = 500 * 1024 * 1024
 # Download timeout in seconds (10 minutes max per file)
 DOWNLOAD_TIMEOUT = 600
 
-# Concurrent file downloads limit (3 parallel downloads for stability)
-MAX_CONCURRENT_DOWNLOADS = 3
+# Concurrent file downloads limit (10 parallel for speed, respects rate limits via semaphores)
+MAX_CONCURRENT_DOWNLOADS = 10
+
+# Number of concurrent post workers
+NUM_POST_WORKERS = 3
+
+# Number of concurrent file download workers  
+NUM_FILE_WORKERS = 5
+
+# Number of concurrent link download workers
+NUM_LINK_WORKERS = 5
 
 # Temp file prefix for cleanup
 TEMP_FILE_PREFIX = 'skybin_tg_'
@@ -303,23 +361,228 @@ def is_leak_content(text: str) -> bool:
     # Check for ACTUAL BIN/card data patterns (not just keywords)
     has_bin_data = has_actual_bin_data(text)
     
-    # Accept if:
-    # 1. Any email:pass combo
-    # 2. Any username:pass combo
-    # 3. Any ULP format entry
-    # 4. Any credential pattern (API key, token, etc)
-    # 5. Private key
-    # 6. Has actual BIN/card data patterns
-    # 7. 3+ leak keywords (suggests leak content)
+    # STRICT: Accept ONLY if actual credentials are present
+    # NO keyword-only detection - removed as it was too loose
     return (
         email_pass_count >= MIN_EMAIL_PASS_COMBOS or
         user_pass_count >= 1 or
         ulp_count >= 1 or
         cred_pattern_count >= MIN_CREDENTIAL_PATTERNS or
         has_private_key or
-        has_bin_data or
-        keyword_count >= 3
+        has_bin_data
     )
+
+
+def is_password_file(filename: str) -> bool:
+    """
+    Check if a filename matches password file patterns.
+    Used to filter which files to extract from archives.
+    """
+    lower = filename.lower()
+    base = os.path.basename(lower)
+    
+    for pattern in PASSWORD_FILE_PATTERNS:
+        if pattern in base:
+            return True
+    
+    return False
+
+
+def extract_file_host_links(text: str) -> list:
+    """
+    Extract download links from file hosting services.
+    Returns list of (url, host_name) tuples.
+    """
+    if not text:
+        return []
+    
+    links = []
+    for pattern in FILE_HOST_PATTERNS:
+        for match in pattern.finditer(text):
+            url = match.group(0)
+            # Identify the host
+            if 'gofile' in url:
+                host = 'gofile'
+            elif 'pixeldrain' in url:
+                host = 'pixeldrain'
+            elif 'mega.nz' in url:
+                host = 'mega'
+            elif 'mediafire' in url:
+                host = 'mediafire'
+            elif 'catbox' in url:
+                host = 'catbox'
+            elif 'krakenfiles' in url:
+                host = 'krakenfiles'
+            elif 'workupload' in url:
+                host = 'workupload'
+            elif 'buzzheavier' in url:
+                host = 'buzzheavier'
+            elif '1fichier' in url:
+                host = '1fichier'
+            elif 'uploadhaven' in url:
+                host = 'uploadhaven'
+            elif 'sendspace' in url:
+                host = 'sendspace'
+            elif 'send.cm' in url or 'send-cm' in url:
+                host = 'sendcm'
+            else:
+                host = 'direct'
+            
+            links.append((url, host))
+    
+    return links
+
+def extract_credential_summary(content: str, max_samples: int = 10) -> tuple:
+    """
+    Extract and summarize critical credential information from content.
+    Now uses the new credential_extractor module for categorization, deduplication,
+    and automatic output to category files (AWS_Keys.txt, Discord_Tokens.txt, etc.).
+    
+    Returns (summary_title, summary_header) tuple.
+    - summary_title: Short title like "2x API Key, 3x Email:Pass"
+    - summary_header: Full formatted header to prepend to paste
+    """
+    # Use new extractor if available (handles deduplication and file output)
+    if HAS_CREDENTIAL_EXTRACTOR:
+        try:
+            return new_extract_credential_summary(content, max_samples)
+        except Exception as e:
+            logger.warning(f"New extractor failed, falling back to legacy: {e}")
+    
+    # Legacy extraction (fallback)
+    summary_parts = []
+    title_parts = []
+    
+    # Extract email:password combos (limit samples)
+    email_pass_pattern = re.compile(r'([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@:]{4,})')
+    email_passes = email_pass_pattern.findall(content)
+    if email_passes:
+        unique_emails = list(set(email_passes))[:max_samples]
+        summary_parts.append(f"EMAIL:PASS COMBOS ({len(email_passes)} total, showing {len(unique_emails)}):")
+        for ep in unique_emails:
+            summary_parts.append(f"  - {ep}")
+        title_parts.append(f"{len(email_passes)}x Email:Pass")
+    
+    # Extract URL:login:pass (stealer logs)
+    ulp_pattern = re.compile(r'(https?://[^\s]+)[\s\t|:]+([^\s@]+)[\s\t|:]+([^\s]{4,})')
+    ulps = ulp_pattern.findall(content)
+    if ulps:
+        unique_ulps = list(set(ulps))[:max_samples]
+        summary_parts.append(f"\nURL:LOGIN:PASS ({len(ulps)} total, showing {len(unique_ulps)}):")
+        for url, login, pwd in unique_ulps:
+            display_url = url[:50] + "..." if len(url) > 50 else url
+            summary_parts.append(f"  - {display_url} | {login} | {pwd}")
+        title_parts.append(f"{len(ulps)}x URL:Login:Pass")
+    
+    # Extract API keys
+    api_patterns = [
+        (r'(ghp_[a-zA-Z0-9]{36})', 'GitHub PAT'),
+        (r'(gho_[a-zA-Z0-9]{36})', 'GitHub OAuth'),
+        (r'(github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59})', 'GitHub Fine-grained'),
+        (r'(sk-[a-zA-Z0-9]{48})', 'OpenAI'),
+        (r'(sk-proj-[a-zA-Z0-9-_]{80,})', 'OpenAI Project'),
+        (r'(AKIA[0-9A-Z]{16})', 'AWS Access Key'),
+        (r'(AIza[0-9A-Za-z_-]{35})', 'Firebase/Google'),
+        (r'(SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43})', 'SendGrid'),
+        (r'(xox[baprs]-[0-9]{10,}-[a-zA-Z0-9-]+)', 'Slack'),
+    ]
+    
+    api_keys_found = []
+    for pattern, key_type in api_patterns:
+        matches = re.findall(pattern, content)
+        for match in matches[:3]:
+            api_keys_found.append((key_type, match))
+    
+    if api_keys_found:
+        summary_parts.append(f"\nAPI KEYS/TOKENS ({len(api_keys_found)} total):")
+        for key_type, key in api_keys_found[:max_samples]:
+            if len(key) > 20:
+                masked = key[:8] + "..." + key[-8:]
+            else:
+                masked = key[:4] + "..." + key[-4:]
+            summary_parts.append(f"  - {key_type}: {masked}")
+        title_parts.append(f"{len(api_keys_found)}x API Key")
+    
+    # Extract Discord tokens
+    discord_pattern = re.compile(r'([MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27})')
+    discord_tokens = discord_pattern.findall(content)
+    if discord_tokens:
+        summary_parts.append(f"\nDISCORD TOKENS ({len(discord_tokens)} total):")
+        for token in discord_tokens[:max_samples]:
+            masked = token[:10] + "..." + token[-10:]
+            summary_parts.append(f"  - {masked}")
+        title_parts.append(f"{len(discord_tokens)}x Discord Token")
+    
+    # Extract Telegram bot tokens
+    tg_pattern = re.compile(r'([0-9]{8,10}:[A-Za-z0-9_-]{35})')
+    tg_tokens = tg_pattern.findall(content)
+    if tg_tokens:
+        summary_parts.append(f"\nTELEGRAM BOT TOKENS ({len(tg_tokens)} total):")
+        for token in tg_tokens[:max_samples]:
+            masked = token[:8] + "..." + token[-8:]
+            summary_parts.append(f"  - {masked}")
+        title_parts.append(f"{len(tg_tokens)}x TG Bot Token")
+    
+    # Extract database connection strings
+    db_patterns = [
+        (r'(mongodb(?:\+srv)?://[^\s]+)', 'MongoDB'),
+        (r'(postgres(?:ql)?://[^\s]+)', 'PostgreSQL'),
+        (r'(mysql://[^\s]+)', 'MySQL'),
+        (r'(redis://[^\s]+)', 'Redis'),
+    ]
+    
+    db_strings = []
+    for pattern, db_type in db_patterns:
+        matches = re.findall(pattern, content, re.IGNORECASE)
+        for match in matches[:2]:
+            db_strings.append((db_type, match))
+    
+    if db_strings:
+        summary_parts.append(f"\nDATABASE CONNECTIONS ({len(db_strings)} total):")
+        for db_type, conn in db_strings[:max_samples]:
+            if len(conn) > 60:
+                display = conn[:30] + "..." + conn[-15:]
+            else:
+                display = conn
+            summary_parts.append(f"  - {db_type}: {display}")
+        title_parts.append(f"{len(db_strings)}x DB Conn")
+    
+    # Extract private keys indicator
+    if '-----BEGIN' in content and 'PRIVATE KEY-----' in content:
+        key_types = []
+        if 'RSA PRIVATE KEY' in content:
+            key_types.append('RSA')
+        if 'DSA PRIVATE KEY' in content:
+            key_types.append('DSA')
+        if 'EC PRIVATE KEY' in content:
+            key_types.append('EC')
+        if 'OPENSSH PRIVATE KEY' in content:
+            key_types.append('OpenSSH')
+        if 'PGP PRIVATE KEY' in content:
+            key_types.append('PGP')
+        if not key_types:
+            key_types.append('Unknown')
+        
+        summary_parts.append(f"\nPRIVATE KEYS: {', '.join(key_types)}")
+        title_parts.append(f"{len(key_types)}x Private Key")
+    
+    if not summary_parts:
+        return "", ""
+    
+    # Build the summary title
+    summary_title = ", ".join(title_parts[:4])  # Max 4 items in title
+    
+    # Build the summary header
+    header = "="*60 + "\n"
+    header += "CREDENTIAL SUMMARY\n"
+    header += "="*60 + "\n"
+    header += "\n".join(summary_parts)
+    header += "\n" + "="*60 + "\n"
+    header += "\n" + " "*20 + "FULL CONTENT BELOW\n"
+    header += "-"*60 + "\n\n"
+    
+    return summary_title, header
+
 
 def generate_auto_title(content: str, channel_name: str = "Telegram") -> str:
     """
@@ -377,16 +640,31 @@ def generate_auto_title(content: str, channel_name: str = "Telegram") -> str:
     
     return " - ".join(parts)[:100]
 
-async def post_to_skybin(content: str, title: str, source: str = "telegram"):
-    """Post discovered content to SkyBin API"""
+async def post_to_skybin(content: str, base_title: str, source: str = "telegram"):
+    """Post discovered content to SkyBin API with credential summary header"""
     if len(content) < 50:  # Lowered threshold
         return False
+    
+    # Generate credential summary - returns (summary_title, summary_header)
+    summary_title, summary_header = extract_credential_summary(content)
+    
+    # Build final title: "2x API Key, 3x Email:Pass" or fall back to base title
+    if summary_title:
+        final_title = summary_title
+    else:
+        final_title = base_title if base_title else "Telegram Leak"
+    
+    # Prepend header to content
+    if summary_header:
+        final_content = summary_header + content
+    else:
+        final_content = content
         
     try:
         async with aiohttp.ClientSession() as session:
             payload = {
-                'content': content[:100000],  # Increased limit
-                'title': (title[:100] if title else 'Telegram Leak').strip(),
+                'content': final_content[:100000],  # Increased limit
+                'title': final_title[:100].strip(),
             }
             async with session.post(
                 f'{SKYBIN_API}/api/paste',
@@ -445,11 +723,14 @@ class TelegramScraper:
         self.client = None
         self.processed_messages = set()
         self.processed_files = set()  # Track downloaded files by unique ID
+        self.processed_links = set()  # Track processed external links
         self.active_channels = []
         self.post_queue = asyncio.Queue()
         self.file_queue = asyncio.Queue()  # Queue for file downloads
+        self.link_queue = asyncio.Queue()  # Queue for external link downloads
         self.posts_made = 0
         self.files_downloaded = 0
+        self.links_downloaded = 0
         self.channels_joined = 0
         self.download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
         
@@ -569,56 +850,10 @@ class TelegramScraper:
         logger.info(f"Total channels/groups to monitor: {len(self.active_channels)}")
         return self.active_channels
     
-    def _is_password_file(self, filename: str) -> bool:
-        """Check if filename is a password file (case-insensitive)"""
-        basename = os.path.basename(filename).lower()
-        password_files = ['passwords.txt', 'password.txt', 'pass.txt', 'pwd.txt', 'logins.txt']
-        return basename in password_files
-    
-    def _generate_password_file_title(self, content: str, archive_name: str, channel_name: str) -> str:
-        """Generate meaningful title for password files extracted from archives"""
-        parts = [f"[TG] {channel_name}"]
-        
-        # Count credentials for title
-        email_pass_count = len(re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@:]{4,}', content))
-        ulp_count = len(re.findall(r'https?://[^\s]+[\s\t|:]+[^\s@]+[\s\t|:]+[^\s]{4,}', content))
-        line_count = len(content.strip().split('\n'))
-        
-        # Detect services mentioned
-        services = []
-        lower = content.lower()
-        service_map = {
-            'twitter': 'Twitter', 'facebook': 'Facebook', 'instagram': 'Instagram',
-            'gmail': 'Gmail', 'outlook': 'Outlook', 'yahoo': 'Yahoo',
-            'netflix': 'Netflix', 'spotify': 'Spotify', 'steam': 'Steam',
-            'paypal': 'PayPal', 'amazon': 'Amazon', 'discord': 'Discord',
-            'tiktok': 'TikTok', 'linkedin': 'LinkedIn', 'github': 'GitHub',
-        }
-        for kw, name in service_map.items():
-            if kw in lower and name not in services:
-                services.append(name)
-                if len(services) >= 3:
-                    break
-        
-        if services:
-            parts.append(" / ".join(services))
-        
-        # Add credential count
-        if email_pass_count > 0:
-            parts.append(f"{email_pass_count} Email:Pass")
-        elif ulp_count > 0:
-            parts.append(f"{ulp_count} URL:Login:Pass")
-        elif line_count > 10:
-            parts.append(f"{line_count} lines")
-        
-        return " - ".join(parts)[:100]
-    
     async def extract_text_from_archive(self, buffer: io.BytesIO, filename: str, channel_name: str) -> int:
         """
-        Extract password files from a zip/rar archive and post them.
-        ONLY extracts password files (passwords.txt, Passwords.txt, etc.)
-        If no password file found, nothing is posted.
-        Returns number of password files processed.
+        Extract ONLY password files from a zip/rar archive and post them.
+        Returns number of files processed.
         """
         processed = 0
         lower_filename = filename.lower()
@@ -627,17 +862,14 @@ class TelegramScraper:
             if lower_filename.endswith('.zip'):
                 buffer.seek(0)
                 with zipfile.ZipFile(buffer, 'r') as zf:
-                    # Scan ALL files in archive looking for password files
                     for info in zf.infolist():
                         # Skip directories and large files
                         if info.is_dir() or info.file_size > MAX_FILE_SIZE:
                             continue
                         
-                        # ONLY process password files
-                        if not self._is_password_file(info.filename):
+                        # ONLY extract password files
+                        if not is_password_file(info.filename):
                             continue
-                        
-                        logger.info(f"    🔑 Found password file: {info.filename}")
                         
                         try:
                             data = zf.read(info.filename)
@@ -646,12 +878,11 @@ class TelegramScraper:
                             except:
                                 content = data.decode('latin-1', errors='ignore')
                             
-                            # Only post if it has meaningful content
-                            if len(content.strip()) > 50:
-                                title = self._generate_password_file_title(content, filename, channel_name)
+                            if len(content) > 50:  # Reasonable minimum
+                                title = generate_auto_title(content, f"{channel_name}/{filename}")
                                 await self.post_queue.put((content, title))
                                 processed += 1
-                                logger.info(f"    📄 Posted password file: {info.filename}")
+                                logger.info(f"    🔑 Extracted password file: {info.filename}")
                         except Exception as e:
                             logger.debug(f"    Error extracting {info.filename}: {e}")
             
@@ -669,17 +900,14 @@ class TelegramScraper:
                     buffer.truncate(0)
                     
                     with rarfile.RarFile(tmp_path, 'r') as rf:
-                        # Scan ALL files in archive looking for password files
                         for info in rf.infolist():
                             # Skip directories and large files
                             if info.is_dir() or info.file_size > MAX_FILE_SIZE:
                                 continue
                             
-                            # ONLY process password files
-                            if not self._is_password_file(info.filename):
+                            # ONLY extract password files
+                            if not is_password_file(info.filename):
                                 continue
-                            
-                            logger.info(f"    🔑 Found password file: {info.filename}")
                             
                             try:
                                 data = rf.read(info.filename)
@@ -688,12 +916,11 @@ class TelegramScraper:
                                 except:
                                     content = data.decode('latin-1', errors='ignore')
                                 
-                                # Only post if it has meaningful content
-                                if len(content.strip()) > 50:
-                                    title = self._generate_password_file_title(content, filename, channel_name)
+                                if len(content) > 50:  # Reasonable minimum
+                                    title = generate_auto_title(content, f"{channel_name}/{filename}")
                                     await self.post_queue.put((content, title))
                                     processed += 1
-                                    logger.info(f"    📄 Posted password file: {info.filename}")
+                                    logger.info(f"    🔑 Extracted password file: {info.filename}")
                             except Exception as e:
                                 logger.debug(f"    Error extracting {info.filename}: {e}")
                 finally:
@@ -704,14 +931,399 @@ class TelegramScraper:
             
             elif lower_filename.endswith('.rar') and not HAS_RARFILE:
                 logger.warning(f"  Cannot extract .rar - rarfile not installed")
-            
-            if processed == 0:
-                logger.debug(f"    No password files found in {filename}")
                 
         except Exception as e:
             logger.error(f"  Error extracting archive {filename}: {e}")
         
         return processed
+
+    async def download_from_gofile(self, url: str) -> tuple:
+        """
+        Download file from gofile.io
+        Returns (bytes, filename) or (None, None) on failure
+        """
+        try:
+            match = re.search(r'gofile\.io/d/([a-zA-Z0-9]+)', url)
+            if not match:
+                return None, None
+            
+            file_id = match.group(1)
+            
+            async with aiohttp.ClientSession() as session:
+                # Get account token first
+                async with session.post('https://api.gofile.io/accounts') as resp:
+                    if resp.status != 200:
+                        return None, None
+                    data = await resp.json()
+                    token = data.get('data', {}).get('token')
+                
+                if not token:
+                    return None, None
+                
+                # Get file info
+                headers = {'Authorization': f'Bearer {token}'}
+                async with session.get(f'https://api.gofile.io/contents/{file_id}', headers=headers) as resp:
+                    if resp.status != 200:
+                        return None, None
+                    data = await resp.json()
+                
+                contents = data.get('data', {}).get('children', {})
+                if not contents:
+                    return None, None
+                
+                # Get first file
+                for file_info in contents.values():
+                    if file_info.get('type') == 'file':
+                        download_url = file_info.get('link')
+                        fname = file_info.get('name', 'unknown')
+                        file_size = file_info.get('size', 0)
+                        
+                        if file_size > MAX_ARCHIVE_SIZE:
+                            logger.info(f"  Skipping large gofile: {fname} ({file_size / 1024 / 1024:.1f}MB)")
+                            return None, None
+                        
+                        # Download the file
+                        async with session.get(download_url, headers=headers) as resp:
+                            if resp.status == 200:
+                                return await resp.read(), fname
+                
+                return None, None
+                
+        except Exception as e:
+            logger.error(f"  Gofile download error: {e}")
+            return None, None
+
+    async def download_from_pixeldrain(self, url: str) -> tuple:
+        """
+        Download file from pixeldrain.com
+        Returns (bytes, filename) or (None, None) on failure
+        """
+        try:
+            match = re.search(r'pixeldrain\.com/(?:u|l)/([a-zA-Z0-9]+)', url)
+            if not match:
+                return None, None
+            
+            file_id = match.group(1)
+            api_url = f'https://pixeldrain.com/api/file/{file_id}'
+            info_url = f'https://pixeldrain.com/api/file/{file_id}/info'
+            
+            async with aiohttp.ClientSession() as session:
+                # Get file info first
+                async with session.get(info_url) as resp:
+                    if resp.status == 200:
+                        info = await resp.json()
+                        fname = info.get('name', 'unknown')
+                        file_size = info.get('size', 0)
+                        
+                        if file_size > MAX_ARCHIVE_SIZE:
+                            logger.info(f"  Skipping large pixeldrain: {fname} ({file_size / 1024 / 1024:.1f}MB)")
+                            return None, None
+                    else:
+                        fname = 'unknown'
+                
+                # Download
+                async with session.get(api_url) as resp:
+                    if resp.status == 200:
+                        return await resp.read(), fname
+            
+            return None, None
+            
+        except Exception as e:
+            logger.error(f"  Pixeldrain download error: {e}")
+            return None, None
+
+    async def download_from_catbox(self, url: str) -> tuple:
+        """
+        Download file from catbox.moe / litterbox
+        Returns (bytes, filename) or (None, None) on failure
+        """
+        try:
+            match = re.search(r'/([a-zA-Z0-9]+\.[a-z]+)$', url)
+            fname = match.group(1) if match else 'unknown'
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    if resp.status == 200:
+                        content_length = resp.headers.get('Content-Length', 0)
+                        if int(content_length) > MAX_ARCHIVE_SIZE:
+                            logger.info(f"  Skipping large catbox file: {fname}")
+                            return None, None
+                        return await resp.read(), fname
+            
+            return None, None
+            
+        except Exception as e:
+            logger.error(f"  Catbox download error: {e}")
+            return None, None
+
+    async def download_from_direct_link(self, url: str) -> tuple:
+        """
+        Download from direct link (generic)
+        Returns (bytes, filename) or (None, None) on failure
+        """
+        try:
+            fname = url.split('/')[-1].split('?')[0]
+            if not fname:
+                fname = 'unknown.zip'
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=DOWNLOAD_TIMEOUT)) as resp:
+                    if resp.status == 200:
+                        content_length = resp.headers.get('Content-Length', 0)
+                        if int(content_length) > MAX_ARCHIVE_SIZE:
+                            logger.info(f"  Skipping large file: {fname}")
+                            return None, None
+                        return await resp.read(), fname
+            
+            return None, None
+            
+        except Exception as e:
+            logger.error(f"  Direct download error: {e}")
+            return None, None
+
+    async def download_from_mediafire(self, url: str) -> tuple:
+        """
+        Download file from mediafire.com
+        Returns (bytes, filename) or (None, None) on failure
+        """
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Get the download page
+                async with session.get(url) as resp:
+                    if resp.status != 200:
+                        return None, None
+                    html = await resp.text()
+                
+                # Extract direct download link from page
+                # MediaFire puts it in a JS variable or direct link
+                download_match = re.search(r'href="(https://download\d*\.mediafire\.com/[^"]+)"', html)
+                if not download_match:
+                    # Try alternate pattern
+                    download_match = re.search(r"aria-label=\"Download file\"[^>]*href=\"([^\"]+)\"", html)
+                
+                if not download_match:
+                    logger.warning("  Could not find MediaFire download link")
+                    return None, None
+                
+                download_url = download_match.group(1)
+                
+                # Extract filename from URL or page
+                fname_match = re.search(r'<div class="filename">([^<]+)</div>', html)
+                fname = fname_match.group(1) if fname_match else url.split('/')[-1]
+                
+                # Download the file
+                async with session.get(download_url, timeout=aiohttp.ClientTimeout(total=DOWNLOAD_TIMEOUT)) as resp:
+                    if resp.status == 200:
+                        content_length = resp.headers.get('Content-Length', 0)
+                        if int(content_length) > MAX_ARCHIVE_SIZE:
+                            logger.info(f"  Skipping large mediafire: {fname} ({int(content_length) / 1024 / 1024:.1f}MB)")
+                            return None, None
+                        return await resp.read(), fname
+            
+            return None, None
+            
+        except Exception as e:
+            logger.error(f"  MediaFire download error: {e}")
+            return None, None
+
+    async def download_from_mega(self, url: str) -> tuple:
+        """
+        Download file from mega.nz
+        Note: Mega requires special handling due to encryption.
+        This uses the megadl CLI if available, otherwise skips.
+        Returns (bytes, filename) or (None, None) on failure
+        """
+        try:
+            import subprocess
+            import shutil
+            
+            # Check if megatools is installed
+            if not shutil.which('megadl'):
+                logger.warning("  megadl not installed - skipping Mega link (install: apt install megatools)")
+                return None, None
+            
+            # Create temp directory for download
+            with tempfile.TemporaryDirectory(prefix='skybin_mega_') as tmpdir:
+                # Download using megadl
+                result = subprocess.run(
+                    ['megadl', '--path', tmpdir, url],
+                    capture_output=True,
+                    text=True,
+                    timeout=DOWNLOAD_TIMEOUT
+                )
+                
+                if result.returncode != 0:
+                    logger.warning(f"  Mega download failed: {result.stderr[:100]}")
+                    return None, None
+                
+                # Find downloaded file
+                files = os.listdir(tmpdir)
+                if not files:
+                    return None, None
+                
+                fpath = os.path.join(tmpdir, files[0])
+                fname = files[0]
+                
+                # Check size
+                fsize = os.path.getsize(fpath)
+                if fsize > MAX_ARCHIVE_SIZE:
+                    logger.info(f"  Skipping large mega file: {fname} ({fsize / 1024 / 1024:.1f}MB)")
+                    return None, None
+                
+                # Read file
+                with open(fpath, 'rb') as f:
+                    data = f.read()
+                
+                return data, fname
+                
+        except subprocess.TimeoutExpired:
+            logger.warning("  Mega download timed out")
+            return None, None
+        except Exception as e:
+            logger.error(f"  Mega download error: {e}")
+            return None, None
+
+    async def download_from_krakenfiles(self, url: str) -> tuple:
+        """
+        Download file from krakenfiles.com
+        Returns (bytes, filename) or (None, None) on failure
+        """
+        try:
+            async with aiohttp.ClientSession() as session:
+                # Get the download page
+                async with session.get(url) as resp:
+                    if resp.status != 200:
+                        return None, None
+                    html = await resp.text()
+                
+                # Extract hash and filename
+                hash_match = re.search(r'data-file-hash="([^"]+)"', html)
+                fname_match = re.search(r'<span class="coin-name">([^<]+)</span>', html)
+                
+                if not hash_match:
+                    return None, None
+                
+                file_hash = hash_match.group(1)
+                fname = fname_match.group(1) if fname_match else 'unknown'
+                
+                # Get download token
+                async with session.post(
+                    'https://krakenfiles.com/download/' + file_hash,
+                    data={'hash': file_hash}
+                ) as resp:
+                    if resp.status != 200:
+                        return None, None
+                    data = await resp.json()
+                
+                download_url = data.get('url')
+                if not download_url:
+                    return None, None
+                
+                # Download
+                async with session.get(download_url, timeout=aiohttp.ClientTimeout(total=DOWNLOAD_TIMEOUT)) as resp:
+                    if resp.status == 200:
+                        content_length = resp.headers.get('Content-Length', 0)
+                        if int(content_length) > MAX_ARCHIVE_SIZE:
+                            logger.info(f"  Skipping large krakenfiles: {fname}")
+                            return None, None
+                        return await resp.read(), fname
+            
+            return None, None
+            
+        except Exception as e:
+            logger.error(f"  Krakenfiles download error: {e}")
+            return None, None
+
+    async def process_external_link(self, url: str, host: str, channel_name: str) -> bool:
+        """
+        Download and process a file from an external host.
+        Extracts password files and posts to SkyBin, then cleans up.
+        Returns True if successful.
+        """
+        if url in self.processed_links:
+            return False
+        
+        self.processed_links.add(url)
+        logger.info(f"  🔗 Downloading from {host}: {url[:60]}...")
+        
+        try:
+            # Download based on host
+            if host == 'gofile':
+                data, fname = await self.download_from_gofile(url)
+            elif host == 'pixeldrain':
+                data, fname = await self.download_from_pixeldrain(url)
+            elif host == 'mega':
+                data, fname = await self.download_from_mega(url)
+            elif host == 'mediafire':
+                data, fname = await self.download_from_mediafire(url)
+            elif host == 'catbox':
+                data, fname = await self.download_from_catbox(url)
+            elif host == 'krakenfiles':
+                data, fname = await self.download_from_krakenfiles(url)
+            elif host == 'direct':
+                data, fname = await self.download_from_direct_link(url)
+            else:
+                # Unsupported hosts - log but don't fail
+                logger.debug(f"  Skipping unsupported host: {host}")
+                return False
+            
+            if not data:
+                logger.warning(f"  Failed to download from {host}")
+                return False
+            
+            self.links_downloaded += 1
+            logger.info(f"  📥 Downloaded: {fname} ({len(data) / 1024 / 1024:.1f}MB)")
+            
+            # Check if it's an archive
+            lower = fname.lower()
+            if any(lower.endswith(ext) for ext in ARCHIVE_EXTENSIONS):
+                buffer = io.BytesIO(data)
+                extracted = await self.extract_text_from_archive(buffer, fname, f"{channel_name}/{host}")
+                buffer.close()
+                del data
+                
+                if extracted > 0:
+                    logger.info(f"  ✓ Extracted {extracted} password files from {fname}")
+                    return True
+                else:
+                    logger.info(f"  No password files in: {fname}")
+                    return False
+            
+            # Plain text file - check if it's a password file
+            elif any(lower.endswith(ext) for ext in CRED_FILE_EXTENSIONS):
+                try:
+                    content = data.decode('utf-8', errors='ignore')
+                except:
+                    content = data.decode('latin-1', errors='ignore')
+                
+                del data
+                
+                if is_password_file(fname) or is_leak_content(content):
+                    title = generate_auto_title(content, f"{channel_name}/{host}")
+                    await self.post_queue.put((content, title))
+                    logger.info(f"  ✓ Posted content from: {fname}")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"  Error processing {host} link: {e}")
+            return False
+
+    async def link_worker(self, worker_id: int = 0):
+        """Worker to process external link downloads from queue"""
+        while True:
+            try:
+                url, host, channel_name = await asyncio.wait_for(self.link_queue.get(), timeout=5.0)
+                async with self.download_semaphore:
+                    await self.process_external_link(url, host, channel_name)
+                # Rate limit per host - external services need spacing
+                await asyncio.sleep(2)
+            except asyncio.TimeoutError:
+                continue
+            except Exception as e:
+                logger.error(f"Link worker {worker_id} error: {e}")
+                await asyncio.sleep(2)
 
     async def download_and_process_file(self, message, channel_name: str) -> bool:
         """
@@ -841,19 +1453,19 @@ class TelegramScraper:
             logger.error(f"  Error downloading {filename}: {e}")
             return False
 
-    async def file_worker(self):
+    async def file_worker(self, worker_id: int = 0):
         """Worker to process file downloads from queue"""
         while True:
             try:
                 message, channel_name = await asyncio.wait_for(self.file_queue.get(), timeout=5.0)
                 await self.download_and_process_file(message, channel_name)
-                # Rate limit file downloads
-                await asyncio.sleep(3)
+                # Minimal delay - semaphore handles concurrency
+                await asyncio.sleep(0.5)
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
-                logger.error(f"File worker error: {e}")
-                await asyncio.sleep(5)
+                logger.error(f"File worker {worker_id} error: {e}")
+                await asyncio.sleep(2)
 
     async def scrape_channel(self, channel, limit=100):
         """Scrape recent messages from a channel"""
@@ -862,6 +1474,7 @@ class TelegramScraper:
         try:
             count = 0
             file_count = 0
+            link_count = 0
             async for message in self.client.iter_messages(channel, limit=limit):
                 if message.id in self.processed_messages:
                     continue
@@ -887,16 +1500,24 @@ class TelegramScraper:
                     except Exception as e:
                         logger.debug(f"Error checking file: {e}")
                 
-                # Process text content
+                # Check for external file host links
                 text = message.text or ''
+                external_links = extract_file_host_links(text)
+                for url, host in external_links:
+                    if url not in self.processed_links:
+                        await self.link_queue.put((url, host, name))
+                        link_count += 1
+                        self.processed_messages.add(message.id)
+                
+                # Process text content (only if has actual credentials)
                 if is_leak_content(text):
                     title = generate_auto_title(text, name)
                     await self.post_queue.put((text, title))
                     self.processed_messages.add(message.id)
                     count += 1
                     
-            if count > 0 or file_count > 0:
-                logger.info(f"  Found {count} leak messages, {file_count} files in {name}")
+            if count > 0 or file_count > 0 or link_count > 0:
+                logger.info(f"  Found {count} leak messages, {file_count} files, {link_count} external links in {name}")
                     
         except ChannelPrivateError:
             logger.warning(f"  Cannot access {name} (private)")
@@ -906,7 +1527,7 @@ class TelegramScraper:
         except Exception as e:
             logger.error(f"  Error scraping {name}: {e}")
     
-    async def post_worker(self):
+    async def post_worker(self, worker_id: int = 0):
         """Worker to post items from queue with rate limiting"""
         while True:
             try:
@@ -916,14 +1537,14 @@ class TelegramScraper:
                 if success:
                     self.posts_made += 1
                 
-                # Rate limit: 1 post every 2 seconds
-                await asyncio.sleep(2)
+                # Minimal rate limit - SkyBin can handle concurrent posts
+                await asyncio.sleep(0.5)
                 
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
-                logger.error(f"Post worker error: {e}")
-                await asyncio.sleep(5)
+                logger.error(f"Post worker {worker_id} error: {e}")
+                await asyncio.sleep(2)
     
     async def monitor_realtime(self):
         """Monitor all channels for new messages in real-time"""
@@ -957,8 +1578,15 @@ class TelegramScraper:
                     except Exception as e:
                         logger.debug(f"Error checking file in handler: {e}")
                 
-                # Process text content
+                # Check for external file host links
                 text = event.text or ''
+                external_links = extract_file_host_links(text)
+                for url, host in external_links:
+                    if url not in self.processed_links:
+                        await self.link_queue.put((url, host, chat_name))
+                        logger.info(f"🔗 New external link from {chat_name}: {host}")
+                
+                # Process text content (only if has actual credentials)
                 if is_leak_content(text):
                     title = generate_auto_title(text, chat_name)
                     await self.post_queue.put((text, title))
@@ -990,9 +1618,22 @@ class TelegramScraper:
         if not await self.start():
             return
         
-        # Start worker tasks
-        post_worker_task = asyncio.create_task(self.post_worker())
-        file_worker_task = asyncio.create_task(self.file_worker())
+        # Start multiple worker tasks for parallel processing
+        worker_tasks = []
+        
+        # Post workers
+        for i in range(NUM_POST_WORKERS):
+            worker_tasks.append(asyncio.create_task(self.post_worker(i)))
+        
+        # File download workers
+        for i in range(NUM_FILE_WORKERS):
+            worker_tasks.append(asyncio.create_task(self.file_worker(i)))
+        
+        # Link download workers
+        for i in range(NUM_LINK_WORKERS):
+            worker_tasks.append(asyncio.create_task(self.link_worker(i)))
+        
+        logger.info(f"Started {NUM_POST_WORKERS} post workers, {NUM_FILE_WORKERS} file workers, {NUM_LINK_WORKERS} link workers")
         
         try:
             # First, try to join known leak channels
@@ -1013,17 +1654,17 @@ class TelegramScraper:
                 await asyncio.sleep(1)  # Rate limit between channels
             
             # Wait for queues to empty
-            while not self.post_queue.empty() or not self.file_queue.empty():
+            while not self.post_queue.empty() or not self.file_queue.empty() or not self.link_queue.empty():
                 await asyncio.sleep(1)
             
-            logger.info(f"Initial scrape complete. Posted {self.posts_made} items, downloaded {self.files_downloaded} files.")
+            logger.info(f"Initial scrape complete. Posted {self.posts_made} items, downloaded {self.files_downloaded} files, {self.links_downloaded} external links.")
             
             # Then monitor in real-time
             await self.monitor_realtime()
             
         finally:
-            post_worker_task.cancel()
-            file_worker_task.cancel()
+            for task in worker_tasks:
+                task.cancel()
         
     async def stop(self):
         """Stop the client"""

@@ -159,6 +159,111 @@ impl ExponentialBackoff {
     }
 }
 
+// =============================================================================
+// API ENDPOINT RATE LIMITERS
+// =============================================================================
+
+use std::time::Instant;
+
+/// Sliding window rate limiter for API endpoints
+/// Uses request counts per time window rather than intervals
+pub struct ApiRateLimiter {
+    /// Maximum requests per window
+    max_requests: u32,
+    /// Window duration
+    window: Duration,
+    /// Requests by key (typically client identifier)
+    requests: Mutex<HashMap<String, Vec<Instant>>>,
+}
+
+impl ApiRateLimiter {
+    /// Create a new API rate limiter
+    pub fn new(max_requests: u32, window_secs: u64) -> Self {
+        Self {
+            max_requests,
+            window: Duration::from_secs(window_secs),
+            requests: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Check if request is allowed and record it
+    /// Returns true if allowed, false if rate limited
+    pub fn check(&self, key: &str) -> bool {
+        let now = Instant::now();
+        let cutoff = now - self.window;
+
+        let mut requests = match self.requests.lock() {
+            Ok(r) => r,
+            Err(_) => return true, // Fail open on lock error
+        };
+
+        let timestamps = requests.entry(key.to_string()).or_insert_with(Vec::new);
+        
+        // Remove expired entries
+        timestamps.retain(|t| *t > cutoff);
+
+        if timestamps.len() >= self.max_requests as usize {
+            false
+        } else {
+            timestamps.push(now);
+            true
+        }
+    }
+
+    /// Cleanup old entries to prevent memory growth
+    pub fn cleanup(&self) {
+        let cutoff = Instant::now() - self.window;
+        
+        if let Ok(mut requests) = self.requests.lock() {
+            requests.retain(|_, timestamps| {
+                timestamps.retain(|t| *t > cutoff);
+                !timestamps.is_empty()
+            });
+        }
+    }
+}
+
+/// Pre-configured rate limiters for API endpoints
+pub struct ApiRateLimiters {
+    /// Uploads: 10 per minute
+    pub upload: ApiRateLimiter,
+    /// URL submissions: 20 per minute
+    pub submit_url: ApiRateLimiter,
+    /// Search: 60 per minute
+    pub search: ApiRateLimiter,
+    /// Admin login: 5 per minute (anti-brute-force)
+    pub admin_login: ApiRateLimiter,
+    /// Comments: 10 per minute
+    pub comments: ApiRateLimiter,
+}
+
+impl ApiRateLimiters {
+    pub fn new() -> Self {
+        Self {
+            upload: ApiRateLimiter::new(10, 60),
+            submit_url: ApiRateLimiter::new(20, 60),
+            search: ApiRateLimiter::new(60, 60),
+            admin_login: ApiRateLimiter::new(5, 60),
+            comments: ApiRateLimiter::new(10, 60),
+        }
+    }
+
+    /// Cleanup all limiters (call periodically)
+    pub fn cleanup_all(&self) {
+        self.upload.cleanup();
+        self.submit_url.cleanup();
+        self.search.cleanup();
+        self.admin_login.cleanup();
+        self.comments.cleanup();
+    }
+}
+
+impl Default for ApiRateLimiters {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

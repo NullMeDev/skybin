@@ -2,6 +2,83 @@
 
 All notable changes to SkyBin will be documented in this file.
 
+## [2.1.0] - 2025-12-05
+
+### Added
+- **Secret Extraction Pipeline** - comprehensive credential extraction with 35+ secret categories
+- **Per-secret deduplication** - SHA256 hash of (type+value) prevents duplicate alerts
+- **Categorized output files** - secrets dumped to respective files (AWS_Keys.txt, Discord_Tokens.txt, etc.)
+- **Server secret exclusion** - `.excluded_secrets` file + auto-excluded environment variables
+- **80+ regex patterns** - covers AWS, GCP, GitHub, GitLab, OpenAI, Discord, Stripe, JWT, and more
+- **Rust `secret_extractor` module** - parallel extraction in Rust scrapers
+- **Python `credential_extractor.py`** - extraction for Telegram scraper
+
+### Technical
+- New `seen_secrets` database table for deduplication tracking
+- Output directory: `/opt/skybin/extracted_secrets/`
+- Patterns researched via secrets-patterns-db (1600+ patterns), TruffleHog, Gitleaks
+
+---
+
+## [2.0.0] - 2025-12-05
+
+### Major
+- **Rust Telegram Scraper Rewrite** - complete rewrite from Python to Rust for performance
+- Unified codebase - all scrapers now in Rust
+- Improved error handling and resilience
+
+---
+
+## [1.6.4] - 2025-12-05
+
+### Changed
+- Telegram scraper extracts ONLY password files from ALL archives
+- Better archive handling for stealer logs
+
+---
+
+## [1.6.3] - 2025-12-05
+
+### Fixed
+- Admin panel JavaScript issues
+- BruteLogs `.boxed.pw` detection
+
+---
+
+## [1.6.2] - 2025-12-04
+
+### Added
+- Admin bulk delete controls in `/x` panel
+- Mass source purge functionality
+
+---
+
+## [1.6.1] - 2025-12-04
+
+### Changed
+- Removed paste size limit - now accepts up to 100MB
+- Better handling of large stealer log dumps
+
+---
+
+## [1.6.0] - 2025-12-04
+
+### Added
+- Security hardening: CSP headers, X-Frame-Options, rate limiting
+- 24-hour admin session expiration
+- SECURITY.md documentation
+
+---
+
+## [1.5.0] - 2025-12-04
+
+### Added
+- **Credential summary extraction** - auto-generates titles like "2x API Key, 3x Email:Pass"
+- Improved auto-titling for streaming services
+- No emojis in generated titles
+
+---
+
 ## [1.4.0] - 2025-12-04
 
 ### Added

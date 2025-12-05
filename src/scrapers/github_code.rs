@@ -1,5 +1,6 @@
 use super::credential_filter::contains_credentials;
 use super::traits::{Scraper, ScraperResult};
+use crate::credential_summary::prepend_summary;
 use crate::models::DiscoveredPaste;
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -278,18 +279,18 @@ impl Scraper for GitHubCodeScraper {
                 continue;
             }
 
-            // Generate descriptive title
-            let secret_type = Self::extract_secret_type(&content);
-            let title = format!(
+            // Generate credential summary and use as title
+            let fallback_title = format!(
                 "[GH] {} in {}/{}",
-                secret_type, item.repository.full_name, item.name
+                Self::extract_secret_type(&content), item.repository.full_name, item.name
             );
+            let (summary_title, summarized_content) = prepend_summary(&content, &fallback_title);
 
             // Create unique ID from repo+path+sha
             let source_id = format!("{}:{}:{}", item.repository.id, item.path, &item.sha[..8]);
 
-            let paste = DiscoveredPaste::new("github", &source_id, content)
-                .with_title(title)
+            let paste = DiscoveredPaste::new("github", &source_id, summarized_content)
+                .with_title(summary_title)
                 .with_url(item.html_url.clone())
                 .with_syntax(
                     item.name

@@ -1,6 +1,6 @@
 [package]
 name = "paste-vault"
-version = "1.6.0"
+version = "2.1.0"
 edition = "2021"
 authors = ["NullMe <dev@nullme.lol>"]
 description = "Multi-source paste aggregator with pattern detection"
@@ -20,7 +20,7 @@ tokio = { version = "1.42", features = ["full"] }
 # Web framework
 axum = { version = "0.7", features = ["macros"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["fs", "trace", "compression-gzip"] }
+tower-http = { version = "0.6", features = ["fs", "trace", "compression-gzip", "set-header"] }
 
 # Templating
 askama = { version = "0.12", features = ["with-axum"] }

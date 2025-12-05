@@ -1,6 +1,6 @@
 use axum::{
     extract::{DefaultBodyLimit, State},
-    http::StatusCode,
+    http::{header, HeaderValue, StatusCode},
     response::IntoResponse,
     routing::{delete, get, post},
     Json, Router,
@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tower_http::compression::CompressionLayer;
 use tower_http::services::ServeDir;
+use tower_http::set_header::SetResponseHeaderLayer;
 
 pub mod handlers;
 
@@ -18,6 +19,7 @@ pub struct AppState {
     pub db: Arc<Mutex<crate::db::Database>>,
     pub url_scraper: Option<Arc<crate::scrapers::ExternalUrlScraper>>,
     pub admin: Option<Arc<crate::admin::AdminAuth>>,
+    pub rate_limiters: Arc<crate::rate_limiter::ApiRateLimiters>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -113,6 +115,31 @@ pub fn create_router(state: AppState) -> Router {
         .route("/x", get(handlers::serve_admin))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // 100MB limit for large paste uploads
         .layer(CompressionLayer::new())
+        // Security headers - prevent tracking, XSS, clickjacking
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff")
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_FRAME_OPTIONS,
+            HeaderValue::from_static("DENY")
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::X_XSS_PROTECTION,
+            HeaderValue::from_static("1; mode=block")
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::REFERRER_POLICY,
+            HeaderValue::from_static("no-referrer")
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CONTENT_SECURITY_POLICY,
+            HeaderValue::from_static("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
+        ))
+        .layer(SetResponseHeaderLayer::overriding(
+            "Permissions-Policy".parse::<axum::http::header::HeaderName>().unwrap(),
+            HeaderValue::from_static("geolocation=(), microphone=(), camera=(), interest-cohort=()")
+        ))
         .with_state(state)
 }
 
