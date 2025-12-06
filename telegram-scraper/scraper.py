@@ -223,24 +223,25 @@ FILE_HOST_PATTERNS = [
 # Max file size for regular files (5MB)
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
-# Max file size for archives (12GB - server has 80GB capacity)
+# Max file size for archives (15GB - server has 80GB disk, 16GB RAM)
 # Large archives are streamed to disk to avoid memory issues
-MAX_ARCHIVE_SIZE = 12 * 1024 * 1024 * 1024  # 12GB
+# With 80GB disk, can handle ~5 simultaneous 15GB archives (cleanup after processing)
+MAX_ARCHIVE_SIZE = 15 * 1024 * 1024 * 1024  # 15GB
 
 # Download timeout in seconds (1 hour max per file for large downloads)
 DOWNLOAD_TIMEOUT = 3600
 
-# Concurrent file downloads limit (5 parallel - 80GB server constraint)
-MAX_CONCURRENT_DOWNLOADS = 5
+# Concurrent file downloads limit (tuned for 16GB RAM / 8vCPU / 80GB disk)
+MAX_CONCURRENT_DOWNLOADS = 12  # Up from 5: 1.5GB peak per download
 
-# Number of concurrent post workers
-NUM_POST_WORKERS = 3
+# Number of concurrent post workers (SkyBin API uploads)
+NUM_POST_WORKERS = 6  # Up from 3: faster queue draining
 
-# Number of concurrent file download workers  
-NUM_FILE_WORKERS = 5
+# Number of concurrent file download workers (archive extraction is CPU-bound)
+NUM_FILE_WORKERS = 10  # Up from 5: utilize 8 vCPU better
 
-# Number of concurrent link download workers
-NUM_LINK_WORKERS = 5
+# Number of concurrent link download workers (external hosts: gofile, pixeldrain, etc)
+NUM_LINK_WORKERS = 8  # Up from 5: network I/O bound
 
 # Temp file prefix for cleanup
 TEMP_FILE_PREFIX = 'skybin_tg_'
