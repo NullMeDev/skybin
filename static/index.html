@@ -13,12 +13,13 @@
 <body>
     <nav>
         <div class="container">
-<a href="/" class="logo">SkyBin <span>v2.3.0</span></a>
+<a href="/" class="logo">SkyBin <span>v2.4.0</span></a>
             <ul class="nav-links">
                 <li><a href="/" class="active">Feed</a></li>
                 <li><a href="/search">Search</a></li>
                 <li><a href="/upload">Upload</a></li>
                 <li><a href="/changelog">Changelog</a></li>
+                <li><a href="/disclaimer">Disclaimer</a></li>
                 <li><a href="https://github.com/NullMeDev/skybin" target="_blank">GitHub</a></li>
             </ul>
             <a href="/upload" class="btn btn-primary btn-sm">New Paste</a>
@@ -44,26 +45,17 @@
                 <div class="stat skeleton-stat"></div>
             </div>
 
-            <!-- Alpine.js powered filters -->
-            <div class="filters" x-data="{ activeFilter: 'all' }">
-                <button class="filter-btn" :class="{ 'active': activeFilter === 'all' }" 
-                        @click="activeFilter = 'all'; htmx.ajax('GET', '/api/pastes/html', '#paste-container')">All</button>
-                <button class="filter-btn" :class="{ 'active': activeFilter === 'alerts' }" 
-                        style="background: linear-gradient(135deg, #dc2626, #991b1b); color: white;"
-                        @click="activeFilter = 'alerts'; htmx.ajax('GET', '/api/pastes/html?high_value=true', '#paste-container')">🚨 Alerts</button>
-                <button class="filter-btn" :class="{ 'active': activeFilter === 'interesting' }" 
-                        style="background: linear-gradient(135deg, #f39c12, #e74c3c);"
-                        @click="activeFilter = 'interesting'; htmx.ajax('GET', '/api/pastes/html?interesting=true', '#paste-container')">🔥 Interesting</button>
-                <button class="filter-btn" :class="{ 'active': activeFilter === 'sensitive' }"
-                        @click="activeFilter = 'sensitive'; htmx.ajax('GET', '/api/pastes/html?sensitive=true', '#paste-container')">Sensitive Only</button>
-                <button class="filter-btn" :class="{ 'active': activeFilter === 'pastebin' }"
-                        @click="activeFilter = 'pastebin'; htmx.ajax('GET', '/api/pastes/html?source=pastebin', '#paste-container')">Pastebin</button>
-                <button class="filter-btn" :class="{ 'active': activeFilter === 'github' }"
-                        @click="activeFilter = 'github'; htmx.ajax('GET', '/api/pastes/html?source=gists', '#paste-container')">GitHub</button>
-                <button class="filter-btn" :class="{ 'active': activeFilter === 'ideone' }"
-                        @click="activeFilter = 'ideone'; htmx.ajax('GET', '/api/pastes/html?source=ideone', '#paste-container')">Ideone</button>
-                <button class="filter-btn" :class="{ 'active': activeFilter === 'telegram' }"
-                        @click="activeFilter = 'telegram'; htmx.ajax('GET', '/api/pastes/html?source=telegram', '#paste-container')">Telegram</button>
+            <!-- Search bar replaces filter tabs -->
+            <div class="search-container" style="margin-bottom: 24px;">
+                <form action="/search" method="get" style="display: flex; gap: 8px;">
+                    <input type="search" 
+                           name="q" 
+                           placeholder="Search pastes by content, service, or credential type..." 
+                           class="search-input"
+                           style="flex: 1; padding: 12px 16px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 14px;"
+                           autofocus>
+                    <button type="submit" class="btn btn-primary">Search</button>
+                </form>
             </div>
 
             <!-- HTMX-powered paste container with infinite scroll -->
