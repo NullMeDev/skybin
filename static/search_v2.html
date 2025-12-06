@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Search - SkyBin</title>
+    <link rel="icon" type="image/png" href="/static/favicon.png">
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        /* Autocomplete dropdown */
+        .autocomplete-container {
+            position: relative;
+            width: 100%;
+        }
+        .autocomplete-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-top: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .autocomplete-dropdown.show {
+            display: block;
+        }
+        .autocomplete-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+        .autocomplete-item:hover, .autocomplete-item.active {
+            background: var(--bg-hover);
+        }
+        .autocomplete-category {
+            font-size: 10px;
+            background: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 3px;
+            text-transform: uppercase;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .autocomplete-count {
+            margin-left: auto;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Advanced filters panel */
+        .filters-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            display: none;
+        }
+        .filters-panel.show {
+            display: block;
+        }
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .filter-field label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--text-secondary);
+        }
+        .filter-field select, .filter-field input {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        /* Saved searches */
+        .saved-searches {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 16px 0;
+        }
+        .saved-search-chip {
+            background: var(--bg-tertiary);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .saved-search-chip:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent);
+        }
+        .saved-search-chip .remove {
+            color: var(--text-muted);
+            font-weight: bold;
+            margin-left: 4px;
+        }
+        .saved-search-chip .remove:hover {
+            color: var(--danger);
+        }
+
+        /* Toolbar */
+        .search-toolbar {
+            display: flex;
+            gap: 12px;
+            margin: 16px 0;
+        }
+        .toolbar-btn {
+            padding: 8px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+        .toolbar-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        .toolbar-btn.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="container">
+            <a href="/" class="logo">SkyBin <span>v2.5.0</span></a>
+            <ul class="nav-links">
+                <li><a href="/">Feed</a></li>
+                <li><a href="/search" class="active">Advanced Search</a></li>
+                <li><a href="/changelog">Changelog</a></li>
+                <li><a href="/status">Status</a></li>
+            </ul>
+            <a href="/upload" class="btn btn-primary btn-sm">New Paste</a>
+        </div>
+    </nav>
+
+    <main class="page">
+        <div class="container">
+            <div class="page-header">
+                <h1>🔍 Advanced Search</h1>
+                <p>Search with autocomplete, filters, and saved searches</p>
+            </div>
+
+            <!-- Saved Searches -->
+            <div class="saved-searches" id="saved-searches"></div>
+
+            <!-- Search Bar with Autocomplete -->
+            <div class="search-box">
+                <div class="autocomplete-container" style="flex: 1;">
+                    <input type="text" class="search-input" id="search-input" 
+                           placeholder="Search for keywords, patterns, secrets..." 
+                           autocomplete="off" autofocus>
+                    <div class="autocomplete-dropdown" id="autocomplete"></div>
+                </div>
+                <button class="btn btn-primary" id="search-btn">Search</button>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="search-toolbar">
+                <button class="toolbar-btn" id="toggle-filters">⚙ Filters</button>
+                <button class="toolbar-btn" id="save-search">💾 Save Search</button>
+                <button class="toolbar-btn" id="clear-filters">✖ Clear Filters</button>
+            </div>
+
+            <!-- Advanced Filters Panel -->
+            <div class="filters-panel" id="filters-panel">
+                <h3>Advanced Filters</h3>
+                <div class="filter-grid">
+                    <div class="filter-field">
+                        <label>Source</label>
+                        <select id="filter-source">
+                            <option value="">All Sources</option>
+                            <option value="pastebin">Pastebin</option>
+                            <option value="ghostbin">GhostBin</option>
+                            <option value="telegram">Telegram</option>
+                            <option value="pastefs">PasteFS</option>
+                            <option value="privatebin">PrivateBin</option>
+                            <option value="zerobin">ZeroBin</option>
+                            <option value="snippet">Snippet</option>
+                            <option value="kbinbin">Kbinbin</option>
+                        </select>
+                    </div>
+                    <div class="filter-field">
+                        <label>Severity</label>
+                        <select id="filter-severity">
+                            <option value="">All Severity</option>
+                            <option value="critical">🚨 Critical</option>
+                            <option value="high">High</option>
+                            <option value="moderate">Moderate</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+                    <div class="filter-field">
+                        <label>Pattern Type</label>
+                        <select id="filter-pattern">
+                            <option value="">All Patterns</option>
+                            <option value="AWS Access Key">AWS Keys</option>
+                            <option value="GitHub Token">GitHub Tokens</option>
+                            <option value="Private Key">Private Keys</option>
+                            <option value="API Key">API Keys</option>
+                            <option value="Discord">Discord Tokens</option>
+                            <option value="Telegram">Telegram Tokens</option>
+                            <option value="Database">Database Creds</option>
+                        </select>
+                    </div>
+                    <div class="filter-field">
+                        <label>Date Range (From)</label>
+                        <input type="date" id="filter-date-from">
+                    </div>
+                    <div class="filter-field">
+                        <label>Date Range (To)</label>
+                        <input type="date" id="filter-date-to">
+                    </div>
+                    <div class="filter-field">
+                        <label>Sensitive Only</label>
+                        <select id="filter-sensitive">
+                            <option value="">All</option>
+                            <option value="true">Sensitive</option>
+                            <option value="false">Non-Sensitive</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div id="results-container">
+                <div class="empty-state">
+                    <h3>Start Searching</h3>
+                    <p>Enter keywords or use advanced filters. Your searches will be saved automatically.</p>
+                </div>
+            </div>
+
+            <div class="pagination" id="pagination" style="display: none;">
+                <button id="prev-btn" disabled>Previous</button>
+                <button id="next-btn">Next</button>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div>Made with ❤ by <a href="https://github.com/NullMeDev" target="_blank">NullMeDev</a></div>
+                <ul class="footer-links">
+                    <li><a href="/status">Status</a></li>
+                    <li><a href="https://github.com/NullMeDev/skybin" target="_blank">GitHub</a></li>
+                </ul>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const API_BASE = '/api';
+        let currentPage = 0;
+        let currentQuery = '';
+        let activeFilters = {};
+        let autocompleteIndex = -1;
+        const LIMIT = 25;
+
+        // Saved searches (localStorage)
+        function loadSavedSearches() {
+            const saved = JSON.parse(localStorage.getItem('savedSearches') || '[]');
+            const container = document.getElementById('saved-searches');
+            container.innerHTML = saved.map(s => `
+                <div class="saved-search-chip" data-id="${s.id}">
+                    <span>${s.label}</span>
+                    <span class="remove" onclick="removeSavedSearch('${s.id}')">&times;</span>
+                </div>
+            `).join('');
+
+            container.querySelectorAll('.saved-search-chip').forEach(chip => {
+                chip.addEventListener('click', (e) => {
+                    if (!e.target.classList.contains('remove')) {
+                        const search = saved.find(s => s.id === chip.dataset.id);
+                        if (search) applySavedSearch(search);
+                    }
+                });
+            });
+        }
+
+        function saveCurrentSearch() {
+            const label = prompt('Name this search:');
+            if (!label) return;
+
+            const saved = JSON.parse(localStorage.getItem('savedSearches') || '[]');
+            const newSearch = {
+                id: Date.now().toString(),
+                label,
+                query: currentQuery,
+                filters: activeFilters,
+                created_at: Date.now()
+            };
+            saved.push(newSearch);
+            localStorage.setItem('savedSearches', JSON.stringify(saved));
+            loadSavedSearches();
+        }
+
+        function removeSavedSearch(id) {
+            let saved = JSON.parse(localStorage.getItem('savedSearches') || '[]');
+            saved = saved.filter(s => s.id !== id);
+            localStorage.setItem('savedSearches', JSON.stringify(saved));
+            loadSavedSearches();
+        }
+
+        function applySavedSearch(search) {
+            document.getElementById('search-input').value = search.query;
+            Object.keys(search.filters).forEach(key => {
+                const elem = document.getElementById(`filter-${key}`);
+                if (elem) elem.value = search.filters[key] || '';
+            });
+            currentQuery = search.query;
+            activeFilters = search.filters;
+            search();
+        }
+
+        // Autocomplete
+        async function updateAutocomplete(query) {
+            if (query.length < 2) {
+                document.getElementById('autocomplete').classList.remove('show');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/search/suggestions?q=${encodeURIComponent(query)}`);
+                const data = await res.json();
+                if (!data.success || !data.data) return;
+
+                const dropdown = document.getElementById('autocomplete');
+                dropdown.innerHTML = data.data.map((s, idx) => `
+                    <div class="autocomplete-item" data-index="${idx}" data-text="${s.text}">
+                        <span class="autocomplete-category">${s.category}</span>
+                        <span>${s.text}</span>
+                        ${s.count ? `<span class="autocomplete-count">${s.count} results</span>` : ''}
+                    </div>
+                `).join('');
+                dropdown.classList.add('show');
+
+                dropdown.querySelectorAll('.autocomplete-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        document.getElementById('search-input').value = item.dataset.text;
+                        dropdown.classList.remove('show');
+                        search();
+                    });
+                });
+            } catch (e) {
+                console.error('Autocomplete failed:', e);
+            }
+        }
+
+        // Search
+        function collectFilters() {
+            activeFilters = {};
+            const source = document.getElementById('filter-source').value;
+            const severity = document.getElementById('filter-severity').value;
+            const pattern = document.getElementById('filter-pattern').value;
+            const dateFrom = document.getElementById('filter-date-from').value;
+            const dateTo = document.getElementById('filter-date-to').value;
+            const sensitive = document.getElementById('filter-sensitive').value;
+
+            if (source) activeFilters.source = source;
+            if (severity) activeFilters.severity = severity;
+            if (pattern) activeFilters.pattern = pattern;
+            if (dateFrom) activeFilters.created_after = Math.floor(new Date(dateFrom).getTime() / 1000);
+            if (dateTo) activeFilters.created_before = Math.floor(new Date(dateTo).getTime() / 1000);
+            if (sensitive) activeFilters.is_sensitive = sensitive === 'true';
+        }
+
+        async function search() {
+            currentQuery = document.getElementById('search-input').value.trim();
+            if (!currentQuery) return;
+
+            collectFilters();
+            currentPage = 0;
+            await loadResults();
+        }
+
+        async function loadResults() {
+            const container = document.getElementById('results-container');
+            container.innerHTML = '<div class="loading"><div class="spinner"></div>Searching...</div>';
+
+            try {
+                let url = `${API_BASE}/search?q=${encodeURIComponent(currentQuery)}&limit=${LIMIT}&offset=${currentPage * LIMIT}`;
+                Object.keys(activeFilters).forEach(key => {
+                    url += `&${key}=${encodeURIComponent(activeFilters[key])}`;
+                });
+
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (!data.success || !data.data || data.data.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <h3>No results found</h3>
+                            <p>Try different keywords or adjust filters.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const html = data.data.map(paste => `
+                    <a href="/paste/${paste.id}" class="paste-item ${paste.high_value ? 'severity-critical' : ''}">
+                        <div class="paste-info">
+                            <div class="paste-title">${paste.title || 'Untitled'}</div>
+                            <div class="paste-meta"><span>${paste.syntax || 'plaintext'}</span></div>
+                        </div>
+                        <div class="paste-badges">
+                            ${paste.high_value ? '<span class="badge badge-critical">🚨 CRITICAL</span>' : ''}
+                            ${paste.is_sensitive ? '<span class="badge badge-sensitive">Sensitive</span>' : ''}
+                            <span class="badge badge-source">${paste.source}</span>
+                        </div>
+                        <div class="paste-time">${formatTime(paste.created_at)}</div>
+                    </a>
+                `).join('');
+
+                container.innerHTML = `
+                    <div style="margin-bottom: 16px; font-size: 13px; color: var(--text-muted);">
+                        Found ${data.data.length}${data.data.length === LIMIT ? '+' : ''} results
+                    </div>
+                    <div class="paste-list">${html}</div>
+                `;
+
+                document.getElementById('pagination').style.display = 'flex';
+                document.getElementById('prev-btn').disabled = currentPage === 0;
+                document.getElementById('next-btn').disabled = data.data.length < LIMIT;
+
+            } catch (e) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>Search failed</h3>
+                        <p>Could not connect to API. ${e.message}</p>
+                        <button class="btn btn-secondary" onclick="loadResults()">Retry</button>
+                    </div>
+                `;
+            }
+        }
+
+        function formatTime(ts) {
+            const d = new Date(ts * 1000);
+            const now = new Date();
+            const diff = Math.floor((now - d) / 1000);
+            if (diff < 60) return 'just now';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+            return d.toLocaleDateString();
+        }
+
+        // Event Listeners
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            updateAutocomplete(e.target.value);
+        });
+
+        document.getElementById('search-input').addEventListener('keydown', (e) => {
+            const dropdown = document.getElementById('autocomplete');
+            const items = dropdown.querySelectorAll('.autocomplete-item');
+            
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                autocompleteIndex = Math.min(autocompleteIndex + 1, items.length - 1);
+                items.forEach((item, idx) => item.classList.toggle('active', idx === autocompleteIndex));
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                autocompleteIndex = Math.max(autocompleteIndex - 1, 0);
+                items.forEach((item, idx) => item.classList.toggle('active', idx === autocompleteIndex));
+            } else if (e.key === 'Enter') {
+                if (autocompleteIndex >= 0 && items[autocompleteIndex]) {
+                    document.getElementById('search-input').value = items[autocompleteIndex].dataset.text;
+                    dropdown.classList.remove('show');
+                    autocompleteIndex = -1;
+                }
+                search();
+            } else if (e.key === 'Escape') {
+                dropdown.classList.remove('show');
+            }
+        });
+
+        document.getElementById('search-btn').addEventListener('click', search);
+        document.getElementById('toggle-filters').addEventListener('click', () => {
+            const panel = document.getElementById('filters-panel');
+            panel.classList.toggle('show');
+        });
+        document.getElementById('save-search').addEventListener('click', saveCurrentSearch);
+        document.getElementById('clear-filters').addEventListener('click', () => {
+            document.querySelectorAll('.filter-field select, .filter-field input').forEach(el => el.value = '');
+            activeFilters = {};
+        });
+
+        document.getElementById('prev-btn').addEventListener('click', () => {
+            if (currentPage > 0) {
+                currentPage--;
+                loadResults();
+            }
+        });
+        document.getElementById('next-btn').addEventListener('click', () => {
+            currentPage++;
+            loadResults();
+        });
+
+        // Click outside to close autocomplete
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.autocomplete-container')) {
+                document.getElementById('autocomplete').classList.remove('show');
+            }
+        });
+
+        // Initialize
+        loadSavedSearches();
+
+        // URL params
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('q')) {
+            document.getElementById('search-input').value = params.get('q');
+            search();
+        }
+    </script>
+</body>
+</html>

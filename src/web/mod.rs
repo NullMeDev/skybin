@@ -90,6 +90,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/pastes/html", get(handlers::get_pastes_html))
         .route("/api/stats/html", get(handlers::get_stats_html))
         .route("/api/search/html", get(handlers::get_search_html))
+        .route("/api/search/suggestions", get(handlers::get_search_suggestions))
         .route("/api/health", get(health_check))
         .route("/api/scrapers/health", get(handlers::scraper_health))
         .route("/api/paste/:id", get(handlers::get_paste_api))

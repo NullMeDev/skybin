@@ -812,6 +812,34 @@ pub async fn get_search_html(
     Ok(Html(html))
 }
 
+/// GET /api/search/suggestions - Autocomplete search suggestions
+pub async fn get_search_suggestions(
+    State(_state): State<AppState>,
+    Query(query): Query<SearchSuggestionQuery>,
+) -> Result<Json<ApiResponse<Vec<crate::search_history::SearchSuggestion>>>, ApiError> {
+    use crate::search_history::get_search_suggestions;
+
+    // Get available sources
+    let sources: Vec<String> = vec![
+        "pastebin", "ghostbin", "pastefs", "privatebin", "zerobin",
+        "snippet", "kbinbin", "telegram", "justpaste", "rentry",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect();
+
+    // Mock recent searches (in production, load from search_history DB)
+    let recent_searches = vec![];
+
+    let suggestions = get_search_suggestions(&query.q, &recent_searches, &sources);
+    Ok(Json(ApiResponse::ok(suggestions)))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchSuggestionQuery {
+    pub q: String,
+}
+
 /// Request body for submitting URLs
 #[derive(Debug, Deserialize)]
 pub struct SubmitUrlRequest {

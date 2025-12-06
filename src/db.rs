@@ -408,48 +408,88 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         Ok(pastes)
     }
 
-    /// Search pastes using full-text search
+    /// Search pastes using full-text search with advanced filters
     pub fn search_pastes(&self, filters: &SearchFilters) -> Result<Vec<Paste>> {
         let raw_query = filters.query.as_deref().unwrap_or("").trim();
         let limit = filters.limit.unwrap_or(25).min(100);
         let offset = filters.offset.unwrap_or(0);
 
-        // If no query, return recent pastes instead
-        if raw_query.is_empty() {
+        // If no query and no filters, return recent pastes
+        if raw_query.is_empty() && filters.source.is_none() && filters.is_sensitive.is_none() 
+           && filters.severity.is_none() && filters.created_after.is_none() 
+           && filters.created_before.is_none() && filters.pattern.is_none() {
             return self.get_recent_pastes_offset(limit, offset);
         }
 
-        // Format query for FTS5 - escape special characters and add wildcards
-        // FTS5 treats these as special: AND OR NOT ( ) " * ^
-        let fts_query = format_fts_query(raw_query);
+        // Build dynamic SQL with filters
+        let mut sql = "SELECT p.id, p.source, p.source_id, p.title, p.author, p.content, p.content_hash, 
+             p.url, p.syntax, p.matched_patterns, p.is_sensitive, p.high_value, p.staff_badge, p.created_at, p.expires_at, p.view_count
+             FROM pastes p".to_string();
 
-        let mut stmt = self.conn.prepare(
-            "SELECT p.id, p.source, p.source_id, p.title, p.author, p.content, p.content_hash, 
-             p.url, p.syntax, p.matched_patterns, p.is_sensitive, p.created_at, p.expires_at, p.view_count
-             FROM pastes p
-             JOIN pastes_fts fts ON p.id = fts.id
-             WHERE fts.pastes_fts MATCH ?
-             AND (? IS NULL OR p.source = ?)
-             AND (? IS NULL OR p.is_sensitive = ?)
-             ORDER BY p.created_at DESC
-             LIMIT ? OFFSET ?",
-        )?;
+        // Use FTS5 only if query provided
+        if !raw_query.is_empty() {
+            let fts_query = format_fts_query(raw_query);
+            sql.push_str(" JOIN pastes_fts fts ON p.id = fts.id WHERE fts.pastes_fts MATCH '");
+            sql.push_str(&fts_query.replace("'", "''"));
+            sql.push_str("'");
+        } else {
+            sql.push_str(" WHERE 1=1");
+        }
 
+        // Add filter conditions
+        if filters.source.is_some() {
+            sql.push_str(" AND p.source = ?");
+        }
+        if filters.is_sensitive.is_some() {
+            sql.push_str(" AND p.is_sensitive = ?");
+        }
+        if filters.created_after.is_some() {
+            sql.push_str(" AND p.created_at >= ?");
+        }
+        if filters.created_before.is_some() {
+            sql.push_str(" AND p.created_at <= ?");
+        }
+        if filters.pattern.is_some() {
+            sql.push_str(" AND p.matched_patterns LIKE ?");
+        }
+        if let Some(ref sev) = filters.severity {
+            match sev.as_str() {
+                "critical" => sql.push_str(" AND p.high_value = 1"),
+                "high" => sql.push_str(" AND p.is_sensitive = 1 AND p.high_value = 0"),
+                "moderate" | "low" => {}, // Not stored separately, ignore
+                _ => {},
+            }
+        }
+
+        sql.push_str(" ORDER BY p.created_at DESC LIMIT ? OFFSET ?");
+
+        let mut stmt = self.conn.prepare(&sql)?;
         let is_sensitive = filters.is_sensitive.map(|v| if v { 1 } else { 0 });
 
+        // Build params array dynamically
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+        
+        if let Some(ref src) = filters.source {
+            params.push(Box::new(src.clone()));
+        }
+        if let Some(sens) = is_sensitive {
+            params.push(Box::new(sens));
+        }
+        if let Some(after) = filters.created_after {
+            params.push(Box::new(after));
+        }
+        if let Some(before) = filters.created_before {
+            params.push(Box::new(before));
+        }
+        if let Some(ref pat) = filters.pattern {
+            params.push(Box::new(format!("%{}%", pat)));
+        }
+        params.push(Box::new(limit));
+        params.push(Box::new(offset));
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
         let pastes = stmt
-            .query_map(
-                params![
-                    fts_query,
-                    filters.source.as_ref(),
-                    filters.source.as_ref(),
-                    is_sensitive,
-                    is_sensitive,
-                    limit,
-                    offset,
-                ],
-                Self::row_to_paste,
-            )?
+            .query_map(rusqlite::params_from_iter(params_refs), Self::row_to_paste)?
             .collect::<SqlResult<Vec<_>>>()?;
 
         Ok(pastes)

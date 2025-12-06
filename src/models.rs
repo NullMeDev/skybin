@@ -91,7 +91,7 @@ impl DiscoveredPaste {
 }
 
 /// Search filters for querying pastes
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SearchFilters {
     pub query: Option<String>,
     pub source: Option<String>,
@@ -99,6 +99,14 @@ pub struct SearchFilters {
     pub interesting: Option<bool>,
     /// Filter for high-value alerts (critical severity patterns)
     pub high_value: Option<bool>,
+    /// Filter by severity: "critical", "high", "moderate", "low"
+    pub severity: Option<String>,
+    /// Filter pastes created after this timestamp (Unix seconds)
+    pub created_after: Option<i64>,
+    /// Filter pastes created before this timestamp (Unix seconds)
+    pub created_before: Option<i64>,
+    /// Filter by pattern name (e.g., "AWS Access Key", "GitHub Token")
+    pub pattern: Option<String>,
     pub limit: Option<usize>,
     pub offset: Option<usize>,
 }

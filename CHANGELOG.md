@@ -5,6 +5,14 @@ All notable changes to SkyBin will be documented in this file.
 ## [2.5.0] - 2025-12-06
 
 ### Added
+- **Phase 4: Advanced Search Improvements** - Enhanced search with modern UX features
+  - **Autocomplete Search Suggestions**: Real-time query suggestions from patterns, sources, and search history
+  - **Saved Searches**: Client-side localStorage persistence for frequently used searches with custom labels
+  - **Advanced Filters Panel**: Severity, date range, pattern type, source, and sensitive-only filters
+  - **Search History Tracking**: Backend support for search analytics and popular queries
+  - **Enhanced SearchFilters**: Added severity, created_after/before, pattern fields for precise filtering
+  - **Search Suggestions API**: `/api/search/suggestions?q=` endpoint with categorized results
+  - **Advanced Search UI**: Standalone search_v2.html with toolbar, filter chips, and keyboard navigation
 - **3-Tier Deduplication System** - Advanced multi-level duplicate detection
   - **Tier 1**: Exact content hash matching (normalized SHA256) - unchanged
   - **Tier 2**: Near-duplicate detection via SimHash with Hamming distance threshold
@@ -33,11 +41,16 @@ All notable changes to SkyBin will be documented in this file.
 - Dedup metrics available for future admin dashboard integration
 
 ### Technical
+- **Phase 4 Modules**:
+  - New `src/search_history.rs` module with SQLite-backed search tracking
+  - SearchFilters now Serializable for saved searches
+  - Dynamic SQL query builder with optional filters
+  - Autocomplete suggestion engine with pattern/source/recent categorization
 - New `src/dedup.rs` module with fast 64-bit SimHash implementation
 - Added `fxhash` dependency for non-cryptographic hashing
 - Added `base64` dependency for PrivateBin decoding
 - Config fields added: `pastefs`, `kbinbin`, `snippet`, `privatebin`, `zerobin`
-- All tests passing including new simhash unit tests
+- All tests passing including new simhash and search_history unit tests
 - Telegram: `channel_manager.py` for prioritization and auto-discovery
 
 ---

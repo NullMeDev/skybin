@@ -13,6 +13,7 @@ pub mod quality;
 pub mod rate_limiter;
 pub mod scheduler;
 pub mod scrapers;
+pub mod search_history;
 pub mod secret_extractor;
 pub mod dedup;
 pub mod url_classifier;
