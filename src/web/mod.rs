@@ -63,6 +63,13 @@ impl IntoResponse for ApiError {
 
 /// Create the Axum router with all routes
 pub fn create_router(state: AppState) -> Router {
+    // Configure upload body limit from config (default 400MB)
+    let upload_limit = state
+        .config
+        .server
+        .max_upload_size
+        .unwrap_or(400 * 1024 * 1024);
+
     Router::new()
         // HTML pages (serve static files)
         .route("/", get(handlers::serve_index))
@@ -119,7 +126,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/x/delete-by-search", post(handlers::admin_delete_by_search))
         // Admin panel page (hidden)
         .route("/x", get(handlers::serve_admin))
-        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // 100MB limit for large paste uploads
+        .layer(DefaultBodyLimit::max(upload_limit)) // Configurable upload limit
         .layer(CompressionLayer::new())
         // Security headers - prevent tracking, XSS, clickjacking
         .layer(SetResponseHeaderLayer::overriding(
