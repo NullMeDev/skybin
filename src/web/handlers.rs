@@ -81,6 +81,7 @@ const PASTE_HTML: &str = include_str!("../../static/paste.html");
 const CHANGELOG_HTML: &str = include_str!("../../static/changelog.html");
 const STATUS_HTML: &str = include_str!("../../static/status.html");
 const ADMIN_HTML: &str = include_str!("../../static/admin.html");
+const DISCLAIMER_HTML: &str = include_str!("../../static/disclaimer.html");
 
 /// GET / - Dashboard HTML page
 pub async fn serve_index() -> impl IntoResponse {
@@ -110,6 +111,11 @@ pub async fn serve_changelog() -> impl IntoResponse {
 /// GET /status - Status page
 pub async fn serve_status() -> impl IntoResponse {
     Html(STATUS_HTML)
+}
+
+/// GET /disclaimer - Disclaimer page
+pub async fn serve_disclaimer() -> impl IntoResponse {
+    Html(DISCLAIMER_HTML)
 }
 
 /// GET /x - Admin panel (hidden)
