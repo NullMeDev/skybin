@@ -344,6 +344,7 @@ pub async fn upload_paste_json(
         matched_patterns: None,
         is_sensitive: false,
         high_value: false, // User uploads don't get auto-flagged
+        staff_badge: None, // User uploads never have staff badges
         created_at: now,
         expires_at: now + (7 * 24 * 60 * 60), // 7-day TTL
         view_count: 0,

@@ -88,6 +88,7 @@ impl Scheduler {
             },
             is_sensitive,
             high_value,
+            staff_badge: None,
             created_at: now,
             expires_at: now + (7 * 24 * 60 * 60), // 7-day TTL
             view_count: 0,

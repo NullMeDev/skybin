@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS pastes (
     syntax TEXT DEFAULT 'plaintext',
     matched_patterns TEXT,
     is_sensitive INTEGER DEFAULT 0,
+    high_value INTEGER DEFAULT 0,
+    staff_badge TEXT DEFAULT NULL,
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL,
     view_count INTEGER DEFAULT 0
@@ -213,7 +215,7 @@ BEGIN
     );
 END;
 
-INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', '003');
+INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', '004');
 INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 "#,
         )?;
@@ -230,8 +232,8 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 
         self.conn.execute(
             "INSERT INTO pastes (id, source, source_id, title, author, content, content_hash, 
-             url, syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             url, syntax, matched_patterns, is_sensitive, high_value, staff_badge, created_at, expires_at, view_count)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 paste.id,
                 paste.source,
@@ -248,6 +250,8 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
                     Some(patterns_json)
                 },
                 if paste.is_sensitive { 1 } else { 0 },
+                if paste.high_value { 1 } else { 0 },
+                paste.staff_badge,
                 paste.created_at,
                 paste.expires_at,
                 paste.view_count,
@@ -260,7 +264,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
     pub fn get_paste(&self, id: &str) -> Result<Option<Paste>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, source, source_id, title, author, content, content_hash, url, 
-             syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+             syntax, matched_patterns, is_sensitive, high_value, staff_badge, created_at, expires_at, view_count 
              FROM pastes WHERE id = ?",
         )?;
 
@@ -277,7 +281,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
     pub fn get_paste_by_hash(&self, hash: &str) -> Result<Option<Paste>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, source, source_id, title, author, content, content_hash, url, 
-             syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+             syntax, matched_patterns, is_sensitive, high_value, staff_badge, created_at, expires_at, view_count 
              FROM pastes WHERE content_hash = ?",
         )?;
 
@@ -299,7 +303,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
     pub fn get_recent_pastes_offset(&self, limit: usize, offset: usize) -> Result<Vec<Paste>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, source, source_id, title, author, content, content_hash, url, 
-             syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+             syntax, matched_patterns, is_sensitive, high_value, staff_badge, created_at, expires_at, view_count 
              FROM pastes ORDER BY created_at DESC LIMIT ? OFFSET ?",
         )?;
 
@@ -321,17 +325,17 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         let sql = match (source, sensitive) {
             (Some(_), Some(_)) => 
                 "SELECT id, source, source_id, title, author, content, content_hash, url, 
-                 syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+                 syntax, matched_patterns, is_sensitive, high_value, staff_badge, created_at, expires_at, view_count 
                  FROM pastes WHERE source = ?1 AND is_sensitive = ?2 ORDER BY created_at DESC LIMIT ?3 OFFSET ?4"
             .to_string(),
             (Some(_), None) => 
                 "SELECT id, source, source_id, title, author, content, content_hash, url, 
-                 syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+                 syntax, matched_patterns, is_sensitive, high_value, staff_badge, created_at, expires_at, view_count 
                  FROM pastes WHERE source = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3"
             .to_string(),
             (None, Some(_)) => 
                 "SELECT id, source, source_id, title, author, content, content_hash, url, 
-                 syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+                 syntax, matched_patterns, is_sensitive, high_value, staff_badge, created_at, expires_at, view_count 
                  FROM pastes WHERE is_sensitive = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3"
             .to_string(),
             (None, None) => return self.get_recent_pastes_offset(limit, offset),
@@ -364,7 +368,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
     pub fn get_interesting_pastes(&self, limit: usize, offset: usize) -> Result<Vec<Paste>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, source, source_id, title, author, content, content_hash, url, 
-             syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+             syntax, matched_patterns, is_sensitive, high_value, staff_badge, created_at, expires_at, view_count 
              FROM pastes 
              WHERE is_sensitive = 1 
              AND matched_patterns IS NOT NULL
@@ -534,7 +538,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
     pub fn get_all_pastes(&self, limit: usize, offset: usize) -> Result<Vec<Paste>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, source, source_id, title, author, content, content_hash, url, 
-             syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+             syntax, matched_patterns, is_sensitive, high_value, staff_badge, created_at, expires_at, view_count 
              FROM pastes ORDER BY created_at DESC LIMIT ? OFFSET ?",
         )?;
         let pastes = stmt
@@ -764,11 +768,8 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
             };
 
         let is_sensitive: i32 = row.get(10)?;
-
-        // Compute high_value: true if any matched pattern has "critical" severity
-        let high_value = matched_patterns
-            .as_ref()
-            .is_some_and(|patterns| patterns.iter().any(|p| p.severity == "critical"));
+        let high_value: i32 = row.get(11)?;
+        let staff_badge: Option<String> = row.get(12)?;
 
         Ok(Paste {
             id: row.get(0)?,
@@ -782,10 +783,11 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
             syntax: row.get(8)?,
             matched_patterns,
             is_sensitive: is_sensitive != 0,
-            high_value,
-            created_at: row.get(11)?,
-            expires_at: row.get(12)?,
-            view_count: row.get(13)?,
+            high_value: high_value != 0,
+            staff_badge,
+            created_at: row.get(13)?,
+            expires_at: row.get(14)?,
+            view_count: row.get(15)?,
         })
     }
 
@@ -793,7 +795,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
     pub fn get_high_value_pastes(&self, limit: usize, offset: usize) -> Result<Vec<Paste>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, source, source_id, title, author, content, content_hash, url, 
-             syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
+             syntax, matched_patterns, is_sensitive, high_value, staff_badge, created_at, expires_at, view_count 
              FROM pastes 
              WHERE matched_patterns IS NOT NULL
              AND matched_patterns LIKE '%\"critical\"%'
@@ -898,6 +900,7 @@ mod tests {
             matched_patterns: None,
             is_sensitive: false,
             high_value: false,
+            staff_badge: None,
             created_at: now,
             expires_at: now + (7 * 24 * 60 * 60),
             view_count: 0,

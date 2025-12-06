@@ -17,6 +17,9 @@ pub struct Paste {
     /// High-value alert: contains critical severity patterns (private keys, AWS keys, etc.)
     #[serde(default)]
     pub high_value: bool,
+    /// Staff badge (e.g. "SkyBin Owner", "Developer", "Moderator")
+    #[serde(default)]
+    pub staff_badge: Option<String>,
     pub created_at: i64,
     pub expires_at: i64,
     pub view_count: i64,
