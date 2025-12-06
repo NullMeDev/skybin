@@ -223,16 +223,18 @@ FILE_HOST_PATTERNS = [
 # Max file size for regular files (5MB)
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
-# Max file size for archives (15GB - server has 80GB disk, 16GB RAM)
+# Max file size for archives (20GB - server has 120GB disk total, 16GB RAM)
 # Large archives are streamed to disk to avoid memory issues
-# With 80GB disk, can handle ~5 simultaneous 15GB archives (cleanup after processing)
-MAX_ARCHIVE_SIZE = 15 * 1024 * 1024 * 1024  # 15GB
+# With 120GB disk (80GB main + 40GB volume), can handle ~6-8 simultaneous 20GB archives
+# Temp files stored on dedicated 40GB volume at /opt/skybin/telegram-cache
+MAX_ARCHIVE_SIZE = 20 * 1024 * 1024 * 1024  # 20GB
 
 # Download timeout in seconds (1 hour max per file for large downloads)
 DOWNLOAD_TIMEOUT = 3600
 
-# Concurrent file downloads limit (tuned for 16GB RAM / 8vCPU / 80GB disk)
-MAX_CONCURRENT_DOWNLOADS = 12  # Up from 5: 1.5GB peak per download
+# Concurrent file downloads limit (tuned for 16GB RAM / 8vCPU / 120GB disk)
+# With dedicated 40GB volume for temp files, can handle more simultaneous large archives
+MAX_CONCURRENT_DOWNLOADS = 18  # Up from 12: 1.5GB peak per download, bottleneck is now RAM
 
 # Number of concurrent post workers (SkyBin API uploads)
 NUM_POST_WORKERS = 6  # Up from 3: faster queue draining
@@ -245,6 +247,15 @@ NUM_LINK_WORKERS = 8  # Up from 5: network I/O bound
 
 # Temp file prefix for cleanup
 TEMP_FILE_PREFIX = 'skybin_tg_'
+
+# Temp directory for large file downloads (use dedicated volume if available)
+# Falls back to system temp if volume not mounted
+TEMP_DIR = os.getenv('TELEGRAM_TEMP_DIR', '/opt/skybin/telegram-cache') 
+if not os.path.exists(TEMP_DIR) or not os.access(TEMP_DIR, os.W_OK):
+    TEMP_DIR = tempfile.gettempdir()  # Fallback to /tmp
+    logger.warning(f"Dedicated volume not available, using {TEMP_DIR} for temp files")
+else:
+    logger.info(f"Using dedicated volume {TEMP_DIR} for temp files")
 
 def should_exclude(text: str) -> bool:
     """Check if text should be excluded (Stripe checkout links, etc.)"""
@@ -891,7 +902,7 @@ class TelegramScraper:
         tmp_path = None
         try:
             ext = os.path.splitext(fname)[1] or '.tmp'
-            with tempfile.NamedTemporaryFile(suffix=ext, prefix=TEMP_FILE_PREFIX, delete=False) as tmp:
+            with tempfile.NamedTemporaryFile(suffix=ext, prefix=TEMP_FILE_PREFIX, delete=False, dir=TEMP_DIR) as tmp:
                 tmp_path = tmp.name
             
             async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=DOWNLOAD_TIMEOUT)) as resp:
@@ -1026,7 +1037,7 @@ class TelegramScraper:
                 buffer.seek(0)
                 tmp_path = None
                 try:
-                    with tempfile.NamedTemporaryFile(suffix='.rar', delete=False) as tmp:
+                    with tempfile.NamedTemporaryFile(suffix='.rar', delete=False, dir=TEMP_DIR) as tmp:
                         tmp.write(buffer.read())
                         tmp_path = tmp.name
                     
@@ -1422,7 +1433,7 @@ class TelegramScraper:
                     tmp_path = None
                     try:
                         ext = os.path.splitext(fname)[1]
-                        with tempfile.NamedTemporaryFile(suffix=ext, prefix=TEMP_FILE_PREFIX, delete=False) as tmp:
+                        with tempfile.NamedTemporaryFile(suffix=ext, prefix=TEMP_FILE_PREFIX, delete=False, dir=TEMP_DIR) as tmp:
                             tmp.write(data)
                             tmp_path = tmp.name
                         del data  # Free memory immediately
@@ -1537,7 +1548,7 @@ class TelegramScraper:
                         tmp_path = None
                         try:
                             ext = os.path.splitext(filename)[1]
-                            with tempfile.NamedTemporaryFile(suffix=ext, prefix=TEMP_FILE_PREFIX, delete=False) as tmp:
+                            with tempfile.NamedTemporaryFile(suffix=ext, prefix=TEMP_FILE_PREFIX, delete=False, dir=TEMP_DIR) as tmp:
                                 tmp_path = tmp.name
                             
                             logger.info(f"  📥 Downloading large archive ({file_size / 1024 / 1024 / 1024:.2f}GB) to temp...")
