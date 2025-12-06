@@ -14,5 +14,6 @@ pub mod rate_limiter;
 pub mod scheduler;
 pub mod scrapers;
 pub mod secret_extractor;
+pub mod url_classifier;
 pub mod validator;
 pub mod web;
