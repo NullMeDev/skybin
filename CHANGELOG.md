@@ -21,6 +21,11 @@ All notable changes to SkyBin will be documented in this file.
   - **Snippet** (snippet.host) - Minimalist paste service
   - **PrivateBin** (privatebin.net) - Encrypted pastebin with directory endpoint
   - **ZeroBin** (0bin.net/zerobin.net) - Multi-instance encrypted paste discovery
+- **Telegram Scraper Enhancements** - Channel prioritization and auto-discovery
+  - **Channel Prioritization**: Dynamic scoring based on credential yield (40%), success rate (30%), member count (15%), recency (15%)
+  - **Auto-Discovery**: Keyword-based search to find new leak channels automatically
+  - **Health Tracking**: Per-channel metrics with success rate and activity monitoring
+  - **Priority Scoring**: 0-100 scale with weighted factors for optimal channel selection
 
 ### Changed
 - Scheduler now preserves raw data (no auto-redaction by default)
@@ -33,6 +38,7 @@ All notable changes to SkyBin will be documented in this file.
 - Added `base64` dependency for PrivateBin decoding
 - Config fields added: `pastefs`, `kbinbin`, `snippet`, `privatebin`, `zerobin`
 - All tests passing including new simhash unit tests
+- Telegram: `channel_manager.py` for prioritization and auto-discovery
 
 ---
 
