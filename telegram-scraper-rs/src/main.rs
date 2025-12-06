@@ -1,4 +1,5 @@
 mod archive;
+mod classifier;
 mod config;
 mod server;
 mod skybin;

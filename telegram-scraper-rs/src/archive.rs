@@ -53,8 +53,8 @@ pub fn has_valid_credentials(content: &str) -> bool {
     let email_count = EMAIL_PASS_PATTERN.find_iter(content).count();
     let url_count = URL_LOGIN_PASS_PATTERN.find_iter(content).count();
     
-    // Must have at least some credentials
-    email_count >= 3 || url_count >= 3 || (email_count + url_count) >= 5
+    // Accept any credential presence (≥1)
+    email_count >= 1 || url_count >= 1
 }
 
 /// Count credentials in content

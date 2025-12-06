@@ -4,6 +4,7 @@ use sha2::{Sha256, Digest};
 use tracing::{info, warn, debug};
 
 use crate::archive::ExtractedPassword;
+use crate::classifier::{classify_credentials, generate_title as classifier_generate_title, generate_summary_header};
 use crate::stats::SharedStats;
 
 #[derive(Clone)]
@@ -96,18 +97,30 @@ impl SkybinClient {
         channel_name: &str,
         stats: &SharedStats,
     ) -> Result<String, String> {
-        // Check for duplicate first
+        // Classify credentials FIRST (before dedup check)
+        let service_stats = classify_credentials(&extracted.content);
+        
+        // Skip if no credentials found
+        if service_stats.total_credentials == 0 {
+            info!("  ⏭️  Skipping - no credentials found");
+            stats.inc_skipped_no_password();
+            return Err("No credentials found".to_string());
+        }
+        
+        // Generate title and header
+        let title = classifier_generate_title(&service_stats);
+        let header = generate_summary_header(&service_stats);
+        let full_content = format!("{}{}", header, extracted.content);
+        
+        // Check for duplicate using RAW content only (not header)
         if self.check_duplicate(&extracted.content).await {
             info!("  ⏭️  Skipping duplicate content");
             stats.inc_skipped_duplicate();
             return Err("Duplicate content".to_string());
         }
         
-        // Generate title
-        let title = generate_title(extracted, channel_name);
-        
         let request = CreatePasteRequest {
-            content: extracted.content.clone(),
+            content: full_content,
             title: Some(title),
             source: "telegram".to_string(),
             syntax: Some("text".to_string()),
@@ -164,67 +177,3 @@ impl SkybinClient {
     }
 }
 
-/// Generate title for password file
-fn generate_title(extracted: &ExtractedPassword, channel_name: &str) -> String {
-    let mut parts = vec![format!("[TG] {}", channel_name)];
-    
-    // Detect services from content
-    let services = detect_services(&extracted.content);
-    if !services.is_empty() {
-        parts.push(services.join(" / "));
-    }
-    
-    // Add credential counts
-    if extracted.email_pass_count > 0 {
-        parts.push(format!("{} Email:Pass", extracted.email_pass_count));
-    } else if extracted.url_login_count > 0 {
-        parts.push(format!("{} URL:Login:Pass", extracted.url_login_count));
-    } else if extracted.line_count > 10 {
-        parts.push(format!("{} lines", extracted.line_count));
-    }
-    
-    let title = parts.join(" - ");
-    if title.len() > 100 {
-        title[..100].to_string()
-    } else {
-        title
-    }
-}
-
-/// Detect services mentioned in content
-fn detect_services(content: &str) -> Vec<String> {
-    let lower = content.to_lowercase();
-    let mut services = vec![];
-    
-    let service_map = [
-        ("twitter", "Twitter"),
-        ("facebook", "Facebook"),
-        ("instagram", "Instagram"),
-        ("gmail", "Gmail"),
-        ("outlook", "Outlook"),
-        ("yahoo", "Yahoo"),
-        ("netflix", "Netflix"),
-        ("spotify", "Spotify"),
-        ("steam", "Steam"),
-        ("paypal", "PayPal"),
-        ("amazon", "Amazon"),
-        ("discord", "Discord"),
-        ("tiktok", "TikTok"),
-        ("linkedin", "LinkedIn"),
-        ("github", "GitHub"),
-        ("roblox", "Roblox"),
-        ("fortnite", "Fortnite"),
-        ("minecraft", "Minecraft"),
-    ];
-    
-    for (keyword, name) in service_map {
-        if lower.contains(keyword) && !services.contains(&name.to_string()) {
-            services.push(name.to_string());
-            if services.len() >= 3 {
-                break;
-            }
-        }
-    }
-    
-    services
-}

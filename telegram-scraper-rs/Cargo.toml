@@ -5,6 +5,9 @@ edition = "2021"
 description = "High-performance Telegram scraper for SkyBin"
 authors = ["NullMe"]
 
+[lib]
+path = "src/main.rs"
+
 [dependencies]
 # Telegram client
 grammers-client = "0.7"
