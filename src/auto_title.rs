@@ -34,23 +34,23 @@ pub fn generate_title(content: &str) -> String {
 /// Returns titles like "2x user:pass found", "3x API Keys: Google, AWS"
 fn generate_credential_title(content: &str) -> Option<String> {
     let mut counts: HashMap<&str, (usize, Vec<String>)> = HashMap::new();
-    
+
     // Count email:password combos
     let email_pass_count = EMAIL_PASS_RE.find_iter(content).count();
     if email_pass_count > 0 {
         counts.insert("user:pass", (email_pass_count, vec![]));
     }
-    
+
     // Count URL:login:pass (stealer logs)
     let ulp_count = ULP_RE.find_iter(content).count();
     if ulp_count > 0 {
         counts.insert("URL:login:pass", (ulp_count, vec![]));
     }
-    
+
     // Count API keys by type
     let mut api_keys: Vec<String> = vec![];
     let mut api_total = 0;
-    
+
     for cap in GITHUB_PAT_RE.find_iter(content) {
         api_total += 1;
         if !api_keys.contains(&"GitHub".to_string()) {
@@ -100,44 +100,44 @@ fn generate_credential_title(content: &str) -> Option<String> {
         }
         let _ = cap;
     }
-    
+
     if api_total > 0 {
         counts.insert("API Keys", (api_total, api_keys));
     }
-    
+
     // Count Discord tokens
     let discord_count = DISCORD_RE.find_iter(content).count();
     if discord_count > 0 {
         counts.insert("Discord Token", (discord_count, vec![]));
     }
-    
+
     // Count Telegram bot tokens
     let tg_count = TG_BOT_RE.find_iter(content).count();
     if tg_count > 0 {
         counts.insert("TG Bot Token", (tg_count, vec![]));
     }
-    
+
     // Count private keys
     let pk_count = PRIVATE_KEY_RE.find_iter(content).count();
     if pk_count > 0 {
         counts.insert("Private Key", (pk_count, vec![]));
     }
-    
+
     // Count database URLs
     let db_count = DB_URL_RE.find_iter(content).count();
     if db_count > 0 {
         counts.insert("DB Connection", (db_count, vec![]));
     }
-    
+
     // Build title from counts
     if counts.is_empty() {
         return None;
     }
-    
+
     // Sort by count descending, take top 2
     let mut items: Vec<_> = counts.into_iter().collect();
-    items.sort_by(|a, b| b.1.0.cmp(&a.1.0));
-    
+    items.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+
     let parts: Vec<String> = items
         .into_iter()
         .take(2)
@@ -150,7 +150,7 @@ fn generate_credential_title(content: &str) -> Option<String> {
             }
         })
         .collect();
-    
+
     if parts.is_empty() {
         None
     } else {
@@ -163,53 +163,36 @@ static EMAIL_PASS_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@:]{4,}").unwrap()
 });
 
-static ULP_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"https?://[^\s]+[\s\t|:]+[^\s@]+[\s\t|:]+[^\s]{4,}").unwrap()
-});
+static ULP_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"https?://[^\s]+[\s\t|:]+[^\s@]+[\s\t|:]+[^\s]{4,}").unwrap());
 
-static GITHUB_PAT_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"gh[ps]_[a-zA-Z0-9]{36}").unwrap()
-});
+static GITHUB_PAT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"gh[ps]_[a-zA-Z0-9]{36}").unwrap());
 
-static OPENAI_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"sk-[a-zA-Z0-9]{48}").unwrap()
-});
+static OPENAI_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"sk-[a-zA-Z0-9]{48}").unwrap());
 
-static AWS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"AKIA[0-9A-Z]{16}").unwrap()
-});
+static AWS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"AKIA[0-9A-Z]{16}").unwrap());
 
-static GOOGLE_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"AIza[0-9A-Za-z_-]{35}").unwrap()
-});
+static GOOGLE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"AIza[0-9A-Za-z_-]{35}").unwrap());
 
-static SENDGRID_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}").unwrap()
-});
+static SENDGRID_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}").unwrap());
 
-static SLACK_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"xox[baprs]-[0-9]{10,}-[a-zA-Z0-9-]+").unwrap()
-});
+static SLACK_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"xox[baprs]-[0-9]{10,}-[a-zA-Z0-9-]+").unwrap());
 
-static STRIPE_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"sk_(live|test)_[0-9a-zA-Z]{24,}").unwrap()
-});
+static STRIPE_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"sk_(live|test)_[0-9a-zA-Z]{24,}").unwrap());
 
-static DISCORD_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}").unwrap()
-});
+static DISCORD_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}").unwrap());
 
-static TG_BOT_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\d{8,10}:[A-Za-z0-9_-]{35}").unwrap()
-});
+static TG_BOT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\d{8,10}:[A-Za-z0-9_-]{35}").unwrap());
 
-static PRIVATE_KEY_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)?\s*PRIVATE\s+KEY").unwrap()
-});
+static PRIVATE_KEY_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)?\s*PRIVATE\s+KEY").unwrap());
 
-static DB_URL_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)(mongodb|postgres|mysql|redis)(?:\+srv)?://").unwrap()
-});
+static DB_URL_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)(mongodb|postgres|mysql|redis)(?:\+srv)?://").unwrap());
 
 fn detect_code_type(content: &str) -> Option<String> {
     let patterns: &[(&str, &str)] = &[
@@ -267,6 +250,7 @@ fn detect_code_type(content: &str) -> Option<String> {
     None
 }
 
+#[allow(dead_code)]
 fn detect_data_type(content: &str) -> Option<String> {
     let content_lower = content.to_lowercase();
 
@@ -466,8 +450,9 @@ fn extract_first_meaningful_line(content: &str) -> Option<String> {
     None
 }
 
-static DEF_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r#"^(?:def|function|fn|class|struct|interface|type)\s+(\w+)"#).unwrap());
+static DEF_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"^(?:def|function|fn|class|struct|interface|type)\s+(\w+)"#).unwrap()
+});
 
 fn generate_summary(content: &str) -> String {
     let first_line = content.lines().next().unwrap_or("").trim();
@@ -527,7 +512,11 @@ mod tests {
     fn test_simplified_user_pass_title() {
         let content = "test@example.com:password123\nuser@domain.org:secret456";
         let title = generate_title(content);
-        assert!(title.contains("user:pass"), "Expected user:pass in title: {}", title);
+        assert!(
+            title.contains("user:pass"),
+            "Expected user:pass in title: {}",
+            title
+        );
     }
 
     #[test]
@@ -535,7 +524,11 @@ mod tests {
         let content = "test@example.com:pass123\nghp_1234567890abcdefghijklmnopqrstuvwx";
         let title = generate_title(content);
         // Should show both types
-        assert!(title.contains("user:pass") || title.contains("API Keys"), "Title: {}", title);
+        assert!(
+            title.contains("user:pass") || title.contains("API Keys"),
+            "Title: {}",
+            title
+        );
     }
 
     #[test]

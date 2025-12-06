@@ -33,9 +33,7 @@ fn format_fts_query(query: &str) -> String {
         .filter(|w| !w.is_empty())
         .map(|word| {
             // Escape quotes in the word
-            let escaped = word
-                .replace('"', "\"\"")
-                .replace(['*', '(', ')'], "");
+            let escaped = word.replace('"', "\"\"").replace(['*', '(', ')'], "");
             // Add wildcard for prefix matching
             format!("\"{}\"*", escaped)
         })
@@ -323,17 +321,17 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         offset: usize,
     ) -> Result<Vec<Paste>> {
         let sql = match (source, sensitive) {
-            (Some(_), Some(_)) => 
+            (Some(_), Some(_)) =>
                 "SELECT id, source, source_id, title, author, content, content_hash, url, 
                  syntax, matched_patterns, is_sensitive, high_value, staff_badge, created_at, expires_at, view_count 
                  FROM pastes WHERE source = ?1 AND is_sensitive = ?2 ORDER BY created_at DESC LIMIT ?3 OFFSET ?4"
             .to_string(),
-            (Some(_), None) => 
+            (Some(_), None) =>
                 "SELECT id, source, source_id, title, author, content, content_hash, url, 
                  syntax, matched_patterns, is_sensitive, high_value, staff_badge, created_at, expires_at, view_count 
                  FROM pastes WHERE source = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3"
             .to_string(),
-            (None, Some(_)) => 
+            (None, Some(_)) =>
                 "SELECT id, source, source_id, title, author, content, content_hash, url, 
                  syntax, matched_patterns, is_sensitive, high_value, staff_badge, created_at, expires_at, view_count 
                  FROM pastes WHERE is_sensitive = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3"

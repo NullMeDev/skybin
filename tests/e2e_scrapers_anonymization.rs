@@ -81,7 +81,11 @@ fn test_anonymization_workflow_with_email_title() {
         .with_title("Code dump from alice@company.com")
         .with_author("alice");
 
-    let config = AnonymizationConfig::default();
+    let config = AnonymizationConfig {
+        strip_authors: true,
+        strip_urls: true,
+        sanitize_titles: true,
+    };
     let anonymized = anonymize_discovered_paste(discovered, &config);
 
     // Email should be removed from title
@@ -107,7 +111,11 @@ fn test_anonymization_preserves_content() {
         .with_title("admin credentials http://hack.me")
         .with_author("hacker");
 
-    let config = AnonymizationConfig::default();
+    let config = AnonymizationConfig {
+        strip_authors: true,
+        strip_urls: true,
+        sanitize_titles: true,
+    };
     let anonymized = anonymize_discovered_paste(discovered, &config);
 
     // Content should NOT be modified (only metadata stripped)
@@ -134,7 +142,11 @@ fn test_scheduler_process_paste_applies_anonymization() {
         .with_syntax("text");
 
     // Simulate what scheduler does: anonymize before storing
-    let config = AnonymizationConfig::default();
+    let config = AnonymizationConfig {
+        strip_authors: true,
+        strip_urls: true,
+        sanitize_titles: true,
+    };
     let discovered_after = anonymize_discovered_paste(discovered_before, &config);
 
     // Verify anonymization was applied
@@ -225,7 +237,11 @@ fn test_multiple_scrapers_anonymization_chain() {
         .with_url("https://dpaste.com/id4")
         .with_title("title@email.com");
 
-    let config = AnonymizationConfig::default();
+    let config = AnonymizationConfig {
+        strip_authors: true,
+        strip_urls: true,
+        sanitize_titles: true,
+    };
 
     // All should be anonymized consistently
     for discovered in [discovered_pb, discovered_gh, discovered_pe, discovered_dp] {
@@ -257,7 +273,11 @@ fn test_no_pii_in_titles_post_anonymization() {
         ("Email: admin@company.co.uk test", "admin@company.co.uk"),
     ];
 
-    let config = AnonymizationConfig::default();
+    let config = AnonymizationConfig {
+        strip_authors: true,
+        strip_urls: true,
+        sanitize_titles: true,
+    };
 
     for (title, pii_pattern) in test_cases {
         let discovered = DiscoveredPaste::new("test", "id", "content").with_title(title);

@@ -8,7 +8,7 @@
 use crate::models::DiscoveredPaste;
 
 /// Configuration for anonymization behavior
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AnonymizationConfig {
     /// Whether to strip author names from pastes
     pub strip_authors: bool,
@@ -18,12 +18,15 @@ pub struct AnonymizationConfig {
     pub sanitize_titles: bool,
 }
 
-impl Default for AnonymizationConfig {
-    fn default() -> Self {
+// Default is provided via derive; see struct attributes
+// Policy: No auto-redaction by default via explicit values in new_default()
+impl AnonymizationConfig {
+pub fn new_default() -> Self {
+        // Policy: No auto-redaction by default
         Self {
-            strip_authors: true,
-            strip_urls: true,
-            sanitize_titles: true,
+            strip_authors: false,
+            strip_urls: false,
+            sanitize_titles: false,
         }
     }
 }
@@ -66,10 +69,9 @@ pub fn anonymize_discovered_paste(
             let sanitized = sanitize_title(&title);
             paste.title = Some(remove_emojis(&sanitized));
         }
+        // Optionally strip emojis from content when sanitization is enabled
+        paste.content = remove_emojis(&paste.content);
     }
-
-    // Remove emojis from content
-    paste.content = remove_emojis(&paste.content);
 
     paste
 }
@@ -157,7 +159,7 @@ mod tests {
             .with_author("John Doe")
             .with_url("https://example.com/paste/123");
 
-        let config = AnonymizationConfig::default();
+        let config = AnonymizationConfig { strip_authors: true, strip_urls: true, sanitize_titles: true };
         let anonymized = anonymize_discovered_paste(paste, &config);
 
         // Author must be stripped
@@ -184,8 +186,8 @@ mod tests {
     #[test]
     fn test_anonymization_config_default() {
         let config = AnonymizationConfig::default();
-        assert!(config.strip_authors);
-        assert!(config.strip_urls);
-        assert!(config.sanitize_titles);
+        assert!(!config.strip_authors);
+        assert!(!config.strip_urls);
+        assert!(!config.sanitize_titles);
     }
 }
