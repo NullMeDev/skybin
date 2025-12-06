@@ -16,4 +16,5 @@ pub mod scrapers;
 pub mod secret_extractor;
 pub mod url_classifier;
 pub mod validator;
+pub mod virustotal;
 pub mod web;
