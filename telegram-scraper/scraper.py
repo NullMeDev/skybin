@@ -775,6 +775,11 @@ class TelegramScraper:
         self.links_downloaded = 0
         self.channels_joined = 0
         self.download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
+        # Channel health metrics in-memory
+        self.channel_stats = {}
+        # Path for health/session audit exports (in working dir on server)
+        self.health_path = os.path.join(os.getcwd(), 'channel_health.json')
+        self.channels_path = os.path.join(os.getcwd(), 'channels.json')
         
     async def start(self):
         """Initialize and start the Telegram client"""
@@ -803,8 +808,19 @@ class TelegramScraper:
         
         me = await self.client.get_me()
         logger.info(f"Logged in as: {me.first_name} (@{me.username})")
+        
+        # Session audit: enumerate all joined channels/groups and export to channels.json
+        try:
+            await self.find_leak_channels()
+            await self.export_channels()
+        except Exception as e:
+            logger.warning(f"Channel session audit failed: {e}")
+        
+        # Kick off periodic health export task
+        asyncio.create_task(self._periodic_health_export())
+        
         return True
-    
+        
     async def join_channel_by_username(self, username: str) -> bool:
         """Join a public channel by username"""
         try:
@@ -878,20 +894,22 @@ class TelegramScraper:
         """Find ALL channels/groups from dialogs"""
         logger.info("Scanning all your channels and groups...")
         
+        self.active_channels = []
         async for dialog in self.client.iter_dialogs():
             entity = dialog.entity
-            
-            # Process channels and groups (supergroups are also Channel type)
             if isinstance(entity, (Channel, Chat)):
                 name = getattr(entity, 'title', '') or ''
                 username = getattr(entity, 'username', '') or ''
-                
-                self.active_channels.append(entity)
+                self.active_channels.append({
+                    'id': getattr(entity, 'id', None),
+                    'name': name,
+                    'username': username,
+                })
                 logger.info(f"  Found: {name} (@{username})" if username else f"  Found: {name}")
         
         logger.info(f"Total channels/groups to monitor: {len(self.active_channels)}")
         return self.active_channels
-    
+        
     async def stream_download_to_file(self, session: aiohttp.ClientSession, url: str, 
                                         headers: dict = None, fname: str = "unknown") -> str:
         """
@@ -1085,6 +1103,7 @@ class TelegramScraper:
                                     await self.post_queue.put((content, title))
                                     processed += 1
                                     logger.info(f"    🔑 Extracted password file: {info.filename}")
+                                    self._record_channel_health(channel_name, True)
                             except Exception as e:
                                 logger.debug(f"    Error extracting {info.filename}: {e}")
                 finally:
@@ -1100,7 +1119,50 @@ class TelegramScraper:
             logger.error(f"  Error extracting archive {filename}: {e}")
         
         return processed
-
+        
+    async def export_channels(self):
+        """Write the active channel list to channels.json"""
+        try:
+            with open(self.channels_path, 'w', encoding='utf-8') as f:
+                json.dump({'channels': self.active_channels, 'exported_at': datetime.utcnow().isoformat() + 'Z'}, f, ensure_ascii=False, indent=2)
+            logger.info(f"Exported channel list to {self.channels_path}")
+        except Exception as e:
+            logger.warning(f"Failed to export channel list: {e}")
+        
+    async def _periodic_health_export(self):
+        """Periodically export in-memory channel health metrics to JSON file"""
+        while True:
+            try:
+                payload = {
+                    'updated_at': datetime.utcnow().isoformat() + 'Z',
+                    'posts_made': self.posts_made,
+                    'files_downloaded': self.files_downloaded,
+                    'links_downloaded': self.links_downloaded,
+                    'channels_joined': self.channels_joined,
+                    'channel_stats': self.channel_stats,
+                }
+                with open(self.health_path, 'w', encoding='utf-8') as f:
+                    json.dump(payload, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.debug(f"Health export failed: {e}")
+            await asyncio.sleep(30)
+        
+    def _record_channel_health(self, channel_name: str, success: bool):
+        st = self.channel_stats.setdefault(channel_name, {
+            'posts': 0,
+            'successes': 0,
+            'failures': 0,
+            'last_success': None,
+            'last_event': None,
+        })
+        st['posts'] += 1
+        st['last_event'] = int(datetime.utcnow().timestamp())
+        if success:
+            st['successes'] += 1
+            st['last_success'] = st['last_event']
+        else:
+            st['failures'] += 1
+        
     async def download_from_gofile(self, url: str) -> tuple:
         """
         Download file from gofile.io
