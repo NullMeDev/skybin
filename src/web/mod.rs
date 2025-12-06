@@ -106,6 +106,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/x/paste/:id", delete(handlers::admin_delete_paste))
         .route("/api/x/comment/:id", delete(handlers::admin_delete_comment))
         .route("/api/x/source/:name", delete(handlers::admin_purge_source))
+        .route("/api/x/staff-post", post(handlers::admin_create_staff_post))
         // Admin analytics endpoints
         .route("/api/x/analytics", get(handlers::admin_analytics))
         .route("/api/x/activity", get(handlers::admin_activity_logs))

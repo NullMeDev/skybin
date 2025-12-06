@@ -1027,6 +1027,13 @@ pub struct AdminLoginRequest {
     pub password: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct StaffPostRequest {
+    pub title: Option<String>,
+    pub content: String,
+    pub staff_badge: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct AdminLoginResponse {
     pub token: String,
@@ -1240,6 +1247,91 @@ pub async fn admin_purge_source(
         .map_err(|e| ApiError(format!("Failed to purge: {}", e)))?;
 
     Ok(Json(ApiResponse::ok(count)))
+}
+
+/// POST /api/x/staff-post - Create a post with staff badge
+pub async fn admin_create_staff_post(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<StaffPostRequest>,
+) -> Result<(StatusCode, Json<ApiResponse<CreatePasteResponse>>), ApiError> {
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    verify_admin(&state, &headers)?;
+
+    if payload.content.is_empty() {
+        return Err(ApiError("Content cannot be empty".to_string()));
+    }
+
+    let mut db = state
+        .db
+        .lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+
+    // Sanitize title if provided
+    let mut title = payload.title;
+    if let Some(t) = &title {
+        let sanitized = t
+            .replace('@', "")
+            .replace("http://", "")
+            .replace("https://", "");
+        title = if sanitized.is_empty() {
+            None
+        } else {
+            Some(sanitized)
+        };
+    }
+
+    // Auto-detect language
+    let detected_lang = crate::lang_detect::detect_language(&payload.content);
+
+    // Compute hash and check for duplicates
+    let content_hash = crate::hash::compute_hash_normalized(&payload.content);
+
+    if let Ok(Some(existing)) = db.get_paste_by_hash(&content_hash) {
+        let response = CreatePasteResponse {
+            id: existing.id.clone(),
+            url: format!("/paste/{}", existing.id),
+        };
+        return Ok((StatusCode::OK, Json(ApiResponse::ok(response))));
+    }
+
+    // Create paste with staff badge
+    let now = Utc::now().timestamp();
+    let paste = crate::models::Paste {
+        id: Uuid::new_v4().to_string(),
+        source: "staff".to_string(),
+        source_id: None,
+        title,
+        author: None,
+        content: payload.content,
+        content_hash,
+        url: None,
+        syntax: detected_lang,
+        matched_patterns: None,
+        is_sensitive: false,
+        high_value: false,
+        staff_badge: payload.staff_badge, // Set the staff badge
+        created_at: now,
+        expires_at: now + (30 * 24 * 60 * 60), // 30-day TTL for staff posts
+        view_count: 0,
+    };
+
+    let id = paste.id.clone();
+    db.insert_paste(&paste).map_err(|e| {
+        if e.to_string().contains("UNIQUE constraint") {
+            ApiError("This content has already been submitted".to_string())
+        } else {
+            ApiError(format!("Failed to store paste: {}", e))
+        }
+    })?;
+
+    let response = CreatePasteResponse {
+        id: id.clone(),
+        url: format!("/paste/{}", id),
+    };
+    Ok((StatusCode::CREATED, Json(ApiResponse::ok(response))))
 }
 
 // === ANALYTICS ENDPOINTS ===

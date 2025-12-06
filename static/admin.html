@@ -113,6 +113,7 @@
         <!-- Tabs Navigation -->
         <div class="tabs">
             <div class="tab active" onclick="showTab('overview')">📊 Overview</div>
+            <div class="tab" onclick="showTab('staffpost')">👤 Staff Post</div>
             <div class="tab" onclick="showTab('analytics')">📈 Analytics</div>
             <div class="tab" onclick="showTab('telegram')">📱 Telegram</div>
             <div class="tab" onclick="showTab('pastes')">📝 Pastes</div>
@@ -161,6 +162,56 @@
             </div>
         </div>
         </div> <!-- End Overview Tab -->
+
+        <!-- Staff Post Tab -->
+        <div id="tab-staffpost" class="tab-content">
+            <div class="section" style="margin: 2rem;">
+                <div class="section-header">
+                    <h2>Create Staff Post</h2>
+                </div>
+                <div class="section-body">
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem; color: #888; font-size: 0.9rem;">Badge</label>
+                            <select id="staffBadge" style="width: 100%; padding: 10px; background: #0a0a0a; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                                <option value="">None (Regular Post)</option>
+                                <option value="SkyBin Owner">SkyBin Owner</option>
+                                <option value="Developer">Developer</option>
+                                <option value="Moderator">Moderator</option>
+                                <option value="Security Researcher">Security Researcher</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem; color: #888; font-size: 0.9rem;">Title (Optional)</label>
+                            <input id="staffPostTitle" type="text" placeholder="Leave empty for auto-generated title" style="width: 100%; padding: 10px; background: #0a0a0a; border: 1px solid #333; color: #fff; border-radius: 4px;">
+                        </div>
+                        <div>
+                            <label style="display: block; margin-bottom: 0.5rem; color: #888; font-size: 0.9rem;">Content</label>
+                            <textarea id="staffPostContent" placeholder="Paste content..." rows="12" style="width: 100%; padding: 10px; background: #0a0a0a; border: 1px solid #333; color: #fff; border-radius: 4px; font-family: monospace; resize: vertical;"></textarea>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <button onclick="createStaffPost()" style="padding: 12px 24px; background: #00ff88; color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Create Post</button>
+                            <button onclick="clearStaffPost()" style="padding: 12px 24px; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Clear</button>
+                            <span id="staffPostStatus" style="color: #888; margin-left: 1rem;"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="section" style="margin: 2rem;">
+                <div class="section-header">
+                    <h2>Badge Preview</h2>
+                </div>
+                <div class="section-body">
+                    <div style="padding: 1rem; background: #0a0a0a; border-radius: 4px;">
+                        <p style="margin-bottom: 0.5rem; color: #888;">How your badge will appear:</p>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span style="color: #00ff88; font-weight: 500;">Anonymous</span>
+                            <span id="badgePreview" style="display: none; padding: 2px 8px; background: #00ff88; color: #000; border-radius: 3px; font-size: 0.75rem; font-weight: 600;"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Analytics Tab -->
         <div id="tab-analytics" class="tab-content">
@@ -895,6 +946,77 @@
                 showToast('Error sending invite', true);
             }
         }
+
+        // Staff Post functions
+        async function createStaffPost() {
+            const badge = document.getElementById('staffBadge').value || null;
+            const title = document.getElementById('staffPostTitle').value.trim() || null;
+            const content = document.getElementById('staffPostContent').value.trim();
+            const statusEl = document.getElementById('staffPostStatus');
+            
+            if (!content) {
+                showToast('Content cannot be empty', true);
+                return;
+            }
+            
+            statusEl.textContent = 'Creating post...';
+            statusEl.style.color = '#00ff88';
+            
+            try {
+                const res = await fetch('/api/x/staff-post', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title, content, staff_badge: badge })
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Staff post created successfully!');
+                    statusEl.textContent = `Created: ${data.data.url}`;
+                    clearStaffPost();
+                    // Reload stats
+                    loadStats();
+                } else {
+                    showToast(data.error || 'Failed to create post', true);
+                    statusEl.textContent = 'Error';
+                    statusEl.style.color = '#ff4444';
+                }
+            } catch (e) {
+                showToast('Error creating post', true);
+                statusEl.textContent = 'Error: ' + e.message;
+                statusEl.style.color = '#ff4444';
+            }
+        }
+        
+        function clearStaffPost() {
+            document.getElementById('staffBadge').value = '';
+            document.getElementById('staffPostTitle').value = '';
+            document.getElementById('staffPostContent').value = '';
+            document.getElementById('staffPostStatus').textContent = '';
+            updateBadgePreview();
+        }
+        
+        function updateBadgePreview() {
+            const badge = document.getElementById('staffBadge').value;
+            const preview = document.getElementById('badgePreview');
+            if (badge) {
+                preview.textContent = badge;
+                preview.style.display = 'inline-block';
+            } else {
+                preview.style.display = 'none';
+            }
+        }
+        
+        // Update badge preview on change
+        document.addEventListener('DOMContentLoaded', () => {
+            const badgeSelect = document.getElementById('staffBadge');
+            if (badgeSelect) {
+                badgeSelect.addEventListener('change', updateBadgePreview);
+            }
+        });
 
         // Enter key to login
         document.getElementById('password').addEventListener('keypress', e => {
