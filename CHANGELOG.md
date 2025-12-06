@@ -2,6 +2,53 @@
 
 All notable changes to SkyBin will be documented in this file.
 
+## [2.4.0] - 2025-12-06
+
+### Added
+- **Intelligent Credential Classification** - Automatic service detection and smart titling
+  - Classifies credentials by email domain (Gmail, Outlook, Yahoo, etc.)
+  - Identifies URL-based credentials (Netflix, Spotify, PayPal, Steam, etc.)
+  - Generates titles like "5x Gmail Logins" or "10x Netflix Accounts"
+  - Prepends credential summary to paste content for quick overview
+- **File Upload with VirusTotal Scanning** - Secure file upload system
+  - Support for files up to 400MB (configurable)
+  - Optional VirusTotal API integration for malware scanning
+  - Scans files up to 650MB using VT's large file upload endpoint
+  - Automatic rejection of malicious content
+  - Async scanning before database operations (no blocking)
+- **Staff Badge System** - Infrastructure for verified staff posts
+  - Database schema with staff_badge column (TEXT)
+  - Optional staff badge display (e.g., "SkyBin Owner", "Developer")
+  - Database migration script (004_add_staff_badge.sql)
+  - All existing pastes default to NULL (regular posts)
+- **Legal Disclaimer Page** - Professional /disclaimer page added
+  - Clear OSINT/educational use policy
+  - Liability disclaimers and content warnings
+  - Accessible from navigation bar
+
+### Changed
+- **UI Cleanup** - Removed redundant filter tabs
+  - Removed: Alerts, Interesting, Sensitive, Pastebin, Github, Ideone, Telegram tabs
+  - Replaced with clean search interface
+  - Classification now visible in paste titles
+- **Telegram Scraper Posting Threshold** - Lower barrier to entry
+  - Reduced from 5 credentials to 1 credential minimum
+  - Better capture of single high-value leaks
+- **Version Bump** - Updated to 2.4.0 across all components
+  - Cargo.toml manifests
+  - Static HTML files
+  - Navigation and footer
+
+### Technical
+- Added `classifier` module for service-based credential categorization
+- Added `virustotal` module with VirusTotalClient for file scanning
+- Database schema v004 with high_value and staff_badge columns
+- Multipart form support in reqwest dependency
+- Config options: max_upload_size, enable_virustotal_scan, virustotal_api_key
+- All 136 unit tests passing
+
+---
+
 ## [2.1.0] - 2025-12-05
 
 ### Added
