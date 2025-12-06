@@ -130,8 +130,7 @@ static SESSION_PARAMS: Lazy<Vec<&'static str>> = Lazy::new(|| {
 });
 
 /// Regex for long base64/signed blobs (potential tokens)
-static LONG_TOKEN_PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"[A-Za-z0-9_-]{40,}").unwrap());
+static LONG_TOKEN_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"[A-Za-z0-9_-]{40,}").unwrap());
 
 /// Regex for LAN IPs
 static LAN_IP_PATTERN: Lazy<Regex> = Lazy::new(|| {
@@ -211,7 +210,7 @@ pub fn classify_url(url: &str) -> UrlClassification {
 /// Classify multiple URLs in content and return aggregate results
 pub fn classify_urls_in_content(content: &str) -> Vec<UrlClassification> {
     let url_pattern = Regex::new(r#"https?://[^\s\]<>"']+"#).unwrap();
-    
+
     url_pattern
         .find_iter(content)
         .map(|m| classify_url(m.as_str()))
@@ -223,13 +222,13 @@ pub fn classify_urls_in_content(content: &str) -> Vec<UrlClassification> {
 pub fn get_url_tags(content: &str) -> Vec<String> {
     let classifications = classify_urls_in_content(content);
     let mut tags: HashSet<String> = HashSet::new();
-    
+
     for c in classifications {
         for tag in c.tags {
             tags.insert(tag);
         }
     }
-    
+
     tags.into_iter().collect()
 }
 
@@ -238,16 +237,16 @@ fn extract_host(url: &str) -> Option<String> {
     let without_scheme = url
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))?;
-    
+
     let host_end = without_scheme.find('/').unwrap_or(without_scheme.len());
     let host_with_port = &without_scheme[..host_end];
-    
+
     // Remove port if present
     let host = host_with_port
         .find(':')
         .map(|i| &host_with_port[..i])
         .unwrap_or(host_with_port);
-    
+
     Some(host.to_string())
 }
 
@@ -256,18 +255,18 @@ pub fn redact_url_values(url: &str) -> String {
     if let Some(query_start) = url.find('?') {
         let base = &url[..query_start];
         let query = &url[query_start + 1..];
-        
+
         let redacted_params: Vec<String> = query
             .split('&')
             .map(|param| {
                 if let Some(eq_pos) = param.find('=') {
                     let key = &param[..eq_pos];
                     let value = &param[eq_pos + 1..];
-                    
+
                     // Redact long values or known sensitive params
                     let is_sensitive = SESSION_PARAMS.iter().any(|p| key.to_lowercase() == *p);
                     let is_long = value.len() > 40;
-                    
+
                     if is_sensitive || is_long {
                         format!("{}=***len{}***", key, value.len())
                     } else {
@@ -278,7 +277,7 @@ pub fn redact_url_values(url: &str) -> String {
                 }
             })
             .collect();
-        
+
         format!("{}?{}", base, redacted_params.join("&"))
     } else {
         url.to_string()
@@ -333,7 +332,8 @@ mod tests {
 
     #[test]
     fn test_redact_sensitive_values() {
-        let url = "https://example.com/callback?access_token=verylongtoken12345678901234567890&user=john";
+        let url =
+            "https://example.com/callback?access_token=verylongtoken12345678901234567890&user=john";
         let redacted = redact_url_values(url);
         assert!(redacted.contains("access_token=***len"));
         assert!(redacted.contains("user=john")); // Short non-sensitive param kept

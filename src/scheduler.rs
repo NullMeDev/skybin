@@ -38,38 +38,62 @@ impl Scheduler {
         &mut self,
         discovered: crate::models::DiscoveredPaste,
     ) -> anyhow::Result<()> {
-        // CREDENTIAL-ONLY FILTER: Only store pastes with actual credentials
+        // Tier 0: credential-only prefilter
         if !Self::has_credentials(&discovered.content) {
             return Ok(());
         }
 
-        // Anonymize the paste before storing (strip authors, URLs, etc)
+        // Preserve raw data; anonymization config defaults to no-op per policy
         let anonymization_config = crate::anonymization::AnonymizationConfig::default();
         let discovered =
             crate::anonymization::anonymize_discovered_paste(discovered, &anonymization_config);
 
-        // Compute content hash
+        // Tier 1: exact content hash dedup
         let content_hash = hash::compute_hash_normalized(&discovered.content);
-
-        // Check for duplicate
         if self.db.get_paste_by_hash(&content_hash)?.is_some() {
+            let _ = self.db.record_dedup_metric("exact");
             return Ok(());
         }
 
-        // Detect patterns
+        // Tier 2: near-duplicate detection via SimHash against recent window
+        let sim = crate::dedup::simhash(&discovered.content);
+        let recent = self.db.get_recent_pastes(500)?; // sliding window
+        let mut near_dup = false;
+        for p in recent.iter() {
+            let other_sim = crate::dedup::simhash(&p.content);
+            let dist = crate::dedup::hamming(sim, other_sim);
+            if dist <= 6 { // threshold tuned for minor edits/whitespace changes
+                near_dup = true;
+                break;
+            }
+        }
+
+        // Tier 3: per-secret dedup gate — only if near-dup AND no new secrets, then drop
+        if near_dup {
+            let extractor = crate::secret_extractor::SecretExtractor::new();
+            let result = extractor.extract(&discovered.content, &discovered.source);
+            if result.new_secrets.is_empty() {
+                // all secrets already seen and content is near-dup — skip insert
+                let _ = self.db.record_dedup_metric("near_dup_rejected");
+                return Ok(());
+            }
+            // We discovered new secrets; persist side-effects and files
+            extractor.write_to_files(&result);
+            let _ = self.db.record_dedup_metric("near_dup_accepted");
+        }
+
+        // Pattern detection & sensitivity
         let patterns = self.detector.detect(&discovered.content);
         let is_sensitive = self.detector.is_sensitive(&discovered.content);
-
-        // High-value alert: flag if any pattern has critical severity
         let high_value = patterns.iter().any(|p| p.severity == "critical");
 
-        // Auto-generate title if missing or "Untitled"
+        // Auto-title
         let title = match &discovered.title {
             Some(t) if !t.is_empty() && t.to_lowercase() != "untitled" => Some(t.clone()),
             _ => Some(crate::auto_title::generate_title(&discovered.content)),
         };
 
-        // Create paste record
+        // Create and insert
         let now = Utc::now().timestamp();
         let paste = Paste {
             id: Uuid::new_v4().to_string(),
@@ -81,16 +105,12 @@ impl Scheduler {
             content_hash,
             url: Some(discovered.url),
             syntax: discovered.syntax.unwrap_or_else(|| "plaintext".to_string()),
-            matched_patterns: if patterns.is_empty() {
-                None
-            } else {
-                Some(patterns)
-            },
+            matched_patterns: if patterns.is_empty() { None } else { Some(patterns) },
             is_sensitive,
             high_value,
             staff_badge: None,
             created_at: now,
-            expires_at: now + (7 * 24 * 60 * 60), // 7-day TTL
+            expires_at: now + (7 * 24 * 60 * 60),
             view_count: 0,
         };
 

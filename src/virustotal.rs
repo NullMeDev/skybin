@@ -93,7 +93,7 @@ impl VirusTotalClient {
         }
 
         let file_size = file_data.len();
-        
+
         if file_size > LARGE_FILE_SIZE {
             return Err(anyhow!("File too large for VirusTotal (max 650MB)"));
         }
@@ -117,12 +117,10 @@ impl VirusTotalClient {
 
     /// Upload file using standard endpoint (≤32MB)
     async fn upload_small_file(&self, file_data: &[u8], filename: &str) -> Result<String> {
-        let form = reqwest::multipart::Form::new()
-            .part(
-                "file",
-                reqwest::multipart::Part::bytes(file_data.to_vec())
-                    .file_name(filename.to_string()),
-            );
+        let form = reqwest::multipart::Form::new().part(
+            "file",
+            reqwest::multipart::Part::bytes(file_data.to_vec()).file_name(filename.to_string()),
+        );
 
         let response = self
             .client
@@ -162,12 +160,10 @@ impl VirusTotalClient {
             .ok_or_else(|| anyhow!("Invalid upload URL response"))?;
 
         // Upload to the provided URL
-        let form = reqwest::multipart::Form::new()
-            .part(
-                "file",
-                reqwest::multipart::Part::bytes(file_data.to_vec())
-                    .file_name(filename.to_string()),
-            );
+        let form = reqwest::multipart::Form::new().part(
+            "file",
+            reqwest::multipart::Part::bytes(file_data.to_vec()).file_name(filename.to_string()),
+        );
 
         let response = self
             .client
@@ -212,7 +208,7 @@ impl VirusTotalClient {
             if status == "completed" {
                 let stats = &analysis.data.attributes.stats;
                 let total = stats.malicious + stats.suspicious + stats.undetected + stats.harmless;
-                
+
                 info!(
                     "VT scan complete: {} malicious, {} suspicious, {} undetected, {} harmless",
                     stats.malicious, stats.suspicious, stats.undetected, stats.harmless
@@ -230,7 +226,10 @@ impl VirusTotalClient {
             sleep(Duration::from_secs(POLL_INTERVAL_SECS)).await;
         }
 
-        Err(anyhow!("VT analysis timeout after {} attempts", MAX_ATTEMPTS))
+        Err(anyhow!(
+            "VT analysis timeout after {} attempts",
+            MAX_ATTEMPTS
+        ))
     }
 }
 

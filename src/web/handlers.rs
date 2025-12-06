@@ -250,9 +250,7 @@ pub async fn upload_paste_json(
 
     // Rate limit check (use "global" key since we don't track IPs for anonymity)
     if !state.rate_limiters.upload.check("global") {
-        return Err(ApiError(
-            "Rate limit exceeded. Try again later".to_string(),
-        ));
+        return Err(ApiError("Rate limit exceeded. Try again later".to_string()));
     }
 
     // Validate content
@@ -261,7 +259,11 @@ pub async fn upload_paste_json(
     }
 
     // Check content size against max upload limit
-    let max_size = state.config.server.max_upload_size.unwrap_or(400 * 1024 * 1024); // Default 400MB
+    let max_size = state
+        .config
+        .server
+        .max_upload_size
+        .unwrap_or(400 * 1024 * 1024); // Default 400MB
     if payload.content.len() > max_size {
         return Err(ApiError(format!(
             "Content exceeds maximum upload size of {}MB",
@@ -273,16 +275,20 @@ pub async fn upload_paste_json(
     if state.config.server.enable_virustotal_scan.unwrap_or(false) {
         if let Some(api_key) = &state.config.apis.virustotal_api_key {
             let vt = crate::virustotal::VirusTotalClient::new(api_key.clone(), true);
-            
+
             // Use title or generate temporary filename for scan
-            let filename = payload.title.clone().unwrap_or_else(|| "paste.txt".to_string());
-            
+            let filename = payload
+                .title
+                .clone()
+                .unwrap_or_else(|| "paste.txt".to_string());
+
             match vt.scan_file(payload.content.as_bytes(), &filename).await {
                 Ok(result) => {
                     if !result.is_safe {
                         tracing::warn!(
                             "VirusTotal detected malicious content: {} malicious, {} suspicious",
-                            result.malicious_count, result.suspicious_count
+                            result.malicious_count,
+                            result.suspicious_count
                         );
                         return Err(ApiError(
                             "Content flagged as malicious by VirusTotal scan".to_string(),
@@ -509,7 +515,7 @@ pub async fn statistics(
 fn format_time(timestamp: i64) -> String {
     let now = chrono::Utc::now().timestamp();
     let diff = now - timestamp;
-    
+
     if diff < 60 {
         "just now".to_string()
     } else if diff < 3600 {
@@ -559,21 +565,24 @@ pub async fn get_pastes_html(
     };
 
     if pastes.is_empty() {
-        return Ok(Html(r#"
+        return Ok(Html(
+            r#"
             <div class="empty-state">
                 <h3>No pastes found</h3>
                 <p>Pastes will appear here as they are scraped from public sources.</p>
             </div>
-        "#.to_string()));
+        "#
+            .to_string(),
+        ));
     }
 
     let mut html = String::from(r#"<div class="paste-list">"#);
-    
+
     for paste in &pastes {
         let title = paste.title.as_deref().unwrap_or("Untitled");
         let title_escaped = html_escape::encode_text(title);
         let time_str = format_time(paste.created_at);
-        
+
         // Determine severity class
         let severity_class = if paste.high_value {
             "severity-critical"
@@ -582,7 +591,7 @@ pub async fn get_pastes_html(
         } else {
             ""
         };
-        
+
         // Build badges
         let mut badges = String::new();
         if paste.high_value {
@@ -590,9 +599,13 @@ pub async fn get_pastes_html(
         } else if paste.is_sensitive {
             badges.push_str(r#"<span class="badge badge-sensitive">Sensitive</span>"#);
         }
-        badges.push_str(&format!(r#"<span class="badge badge-source">{}</span>"#, paste.source));
-        
-        html.push_str(&format!(r#"
+        badges.push_str(&format!(
+            r#"<span class="badge badge-source">{}</span>"#,
+            paste.source
+        ));
+
+        html.push_str(&format!(
+            r#"
             <a href="/paste/{}" class="paste-item {}">
                 <div class="paste-info">
                     <div class="paste-title">{}</div>
@@ -605,16 +618,19 @@ pub async fn get_pastes_html(
                 </div>
                 <div class="paste-time">{}</div>
             </a>
-        "#, paste.id, severity_class, title_escaped, paste.syntax, badges, time_str));
+        "#,
+            paste.id, severity_class, title_escaped, paste.syntax, badges, time_str
+        ));
     }
-    
+
     html.push_str("</div>");
-    
+
     // Add infinite scroll trigger if there might be more results
     if pastes.len() == limit {
         let next_offset = offset + limit;
         let filter_params = build_filter_params(&filters);
-        html.push_str(&format!(r##"
+        html.push_str(&format!(
+            r##"
             <div class="load-more-trigger"
                  hx-get="/api/pastes/html?offset={}{}"
                  hx-trigger="revealed"
@@ -625,9 +641,11 @@ pub async fn get_pastes_html(
                     Loading more...
                 </div>
             </div>
-        "##, next_offset, filter_params));
+        "##,
+            next_offset, filter_params
+        ));
     }
-    
+
     Ok(Html(html))
 }
 
@@ -650,9 +668,7 @@ fn build_filter_params(filters: &SearchFilters) -> String {
 }
 
 /// GET /api/stats/html - Returns HTML fragment of stats bar for HTMX
-pub async fn get_stats_html(
-    State(state): State<AppState>,
-) -> Result<Html<String>, ApiError> {
+pub async fn get_stats_html(State(state): State<AppState>) -> Result<Html<String>, ApiError> {
     let db = state
         .db
         .lock()
@@ -664,7 +680,7 @@ pub async fn get_stats_html(
     let sensitive_pastes = db
         .get_sensitive_paste_count()
         .map_err(|e| ApiError(format!("Failed to get sensitive count: {}", e)))?;
-    
+
     // Get recent count (last 24h)
     let now = chrono::Utc::now().timestamp();
     let recent_count = db
@@ -674,7 +690,8 @@ pub async fn get_stats_html(
         .filter(|p| now - p.created_at < 86400)
         .count();
 
-    let html = format!(r#"
+    let html = format!(
+        r#"
         <div class="stat">
             <div class="stat-value">{}</div>
             <div class="stat-label">Total</div>
@@ -691,12 +708,12 @@ pub async fn get_stats_html(
             <div class="stat-value">26</div>
             <div class="stat-label">Sources ▼</div>
         </div>
-    "#, 
+    "#,
         format_number(total_pastes),
         format_number(sensitive_pastes),
         format_number(recent_count as i64)
     );
-    
+
     Ok(Html(html))
 }
 
@@ -718,7 +735,9 @@ pub async fn get_search_html(
 ) -> Result<Html<String>, ApiError> {
     // Rate limit check
     if !state.rate_limiters.search.check("global") {
-        return Ok(Html(r#"<div class="error-state">Rate limit exceeded. Try again later.</div>"#.to_string()));
+        return Ok(Html(
+            r#"<div class="error-state">Rate limit exceeded. Try again later.</div>"#.to_string(),
+        ));
     }
 
     let mut db = state
@@ -733,22 +752,28 @@ pub async fn get_search_html(
         .map_err(|e| ApiError(format!("Search failed: {}", e)))?;
 
     if pastes.is_empty() {
-        return Ok(Html(r#"
+        return Ok(Html(
+            r#"
             <div class="empty-state">
                 <h3>No results found</h3>
                 <p>Try a different search term or adjust your filters.</p>
             </div>
-        "#.to_string()));
+        "#
+            .to_string(),
+        ));
     }
 
     let mut html = String::from(r#"<div class="paste-list search-results">"#);
-    html.push_str(&format!(r#"<div class="results-count">{} results found</div>"#, pastes.len()));
-    
+    html.push_str(&format!(
+        r#"<div class="results-count">{} results found</div>"#,
+        pastes.len()
+    ));
+
     for paste in &pastes {
         let title = paste.title.as_deref().unwrap_or("Untitled");
         let title_escaped = html_escape::encode_text(title);
         let time_str = format_time(paste.created_at);
-        
+
         let severity_class = if paste.high_value {
             "severity-critical"
         } else if paste.is_sensitive {
@@ -756,16 +781,20 @@ pub async fn get_search_html(
         } else {
             ""
         };
-        
+
         let mut badges = String::new();
         if paste.high_value {
             badges.push_str(r#"<span class="badge badge-critical">🚨 CRITICAL</span>"#);
         } else if paste.is_sensitive {
             badges.push_str(r#"<span class="badge badge-sensitive">Sensitive</span>"#);
         }
-        badges.push_str(&format!(r#"<span class="badge badge-source">{}</span>"#, paste.source));
-        
-        html.push_str(&format!(r#"
+        badges.push_str(&format!(
+            r#"<span class="badge badge-source">{}</span>"#,
+            paste.source
+        ));
+
+        html.push_str(&format!(
+            r#"
             <a href="/paste/{}" class="paste-item {}">
                 <div class="paste-info">
                     <div class="paste-title">{}</div>
@@ -774,9 +803,11 @@ pub async fn get_search_html(
                 <div class="paste-badges">{}</div>
                 <div class="paste-time">{}</div>
             </a>
-        "#, paste.id, severity_class, title_escaped, paste.syntax, badges, time_str));
+        "#,
+            paste.id, severity_class, title_escaped, paste.syntax, badges, time_str
+        ));
     }
-    
+
     html.push_str("</div>");
     Ok(Html(html))
 }
@@ -1051,6 +1082,9 @@ pub struct AdminStatsResponse {
     pub total_comments: i64,
     pub sensitive_pastes: i64,
     pub sources_enabled: Vec<String>,
+    pub dedup_exact_24h: i64,
+    pub dedup_near_rejected_24h: i64,
+    pub dedup_near_accepted_24h: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -1142,11 +1176,18 @@ pub async fn admin_stats(
         .get_db_stats()
         .map_err(|e| ApiError(format!("Database error: {}", e)))?;
 
+    let (exact, near_rejected, near_accepted) = db
+        .get_dedup_stats()
+        .unwrap_or((0, 0, 0));
+
     Ok(Json(ApiResponse::ok(AdminStatsResponse {
         total_pastes: pastes,
         total_comments: comments,
         sensitive_pastes: sensitive,
-        sources_enabled: vec!["pastebin".into(), "gists".into(), "hastebin".into()],
+        sources_enabled: state.config.sources.enabled_sources().iter().map(|s| s.to_string()).collect(),
+        dedup_exact_24h: exact,
+        dedup_near_rejected_24h: near_rejected,
+        dedup_near_accepted_24h: near_accepted,
     })))
 }
 

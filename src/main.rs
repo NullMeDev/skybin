@@ -8,10 +8,11 @@ use skybin::scrapers::traits::Scraper;
 use skybin::scrapers::{
     BpastScraper, BpasteScraper, CodepadScraper, ControlcScraper, DPasteScraper, DefuseScraper,
     DpasteOrgScraper, ExternalUrlScraper, GhostbinScraper, GitHubCodeScraper, GitHubGistsScraper,
-    HastebinScraper, IdeoneScraper, IxioScraper, JustPasteScraper, Paste2Scraper, PasteEeScraper,
-    PasteRsScraper, PastebinPlScraper, PastebinScraper, PastecodeScraper, PastesioScraper,
-    PsbdmpScraper, QuickpasteScraper, RentryScraper, SlexyScraper, SprungeScraper, TermbinScraper,
-    TorPastesScraper, UbuntuPastebinScraper,
+    HastebinScraper, IdeoneScraper, IxioScraper, JustPasteScraper, KbinbinScraper, Paste2Scraper,
+    PasteEeScraper, PasteFsScraper, PasteRsScraper, PastebinPlScraper, PastebinScraper,
+    PastecodeScraper, PastesioScraper, PrivatebinScraper, PsbdmpScraper, QuickpasteScraper,
+    RentryScraper, SlexyScraper, SnippetScraper, SprungeScraper, TermbinScraper, TorPastesScraper,
+    UbuntuPastebinScraper, ZeroBinScraper,
 };
 use skybin::web::{create_router, AppState};
 use std::sync::{Arc, Mutex};
@@ -238,6 +239,21 @@ async fn main() -> anyhow::Result<()> {
     }
     if config.sources.bpast {
         spawn_scraper("bpast", Box::new(BpastScraper::new()));
+    }
+    if config.sources.pastefs {
+        spawn_scraper("pastefs", Box::new(PasteFsScraper::new()));
+    }
+    if config.sources.kbinbin {
+        spawn_scraper("kbinbin", Box::new(KbinbinScraper::new()));
+    }
+    if config.sources.snippet {
+        spawn_scraper("snippet", Box::new(SnippetScraper::new()));
+    }
+    if config.sources.privatebin {
+        spawn_scraper("privatebin", Box::new(PrivatebinScraper::new()));
+    }
+    if config.sources.zerobin {
+        spawn_scraper("zerobin", Box::new(ZeroBinScraper::new()));
     }
 
     // External URL scraper

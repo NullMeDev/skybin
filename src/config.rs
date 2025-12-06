@@ -112,6 +112,16 @@ pub struct SourcesConfig {
     pub pastesio: bool,
     #[serde(default)]
     pub bpast: bool,
+    #[serde(default)]
+    pub pastefs: bool,
+    #[serde(default)]
+    pub kbinbin: bool,
+    #[serde(default)]
+    pub snippet: bool,
+    #[serde(default)]
+    pub privatebin: bool,
+    #[serde(default)]
+    pub zerobin: bool,
 }
 
 impl SourcesConfig {
@@ -205,6 +215,21 @@ impl SourcesConfig {
         if self.bpast {
             sources.push("bpast");
         }
+        if self.pastefs {
+            sources.push("pastefs");
+        }
+        if self.kbinbin {
+            sources.push("kbinbin");
+        }
+        if self.snippet {
+            sources.push("snippet");
+        }
+        if self.privatebin {
+            sources.push("privatebin");
+        }
+        if self.zerobin {
+            sources.push("zerobin");
+        }
         sources
     }
 }
@@ -258,16 +283,22 @@ impl Config {
     /// Load configuration from a TOML file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         // Security: Canonicalize path to prevent traversal attacks
-        let canonical_path = std::fs::canonicalize(path)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::PermissionDenied, 
-                format!("Invalid config path: {}", e)))?;
-        
+        let canonical_path = std::fs::canonicalize(path).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!("Invalid config path: {}", e),
+            )
+        })?;
+
         // Security: Ensure config file has .toml extension
         if canonical_path.extension().and_then(|s| s.to_str()) != Some("toml") {
-            return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied,
-                "Config file must have .toml extension").into());
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Config file must have .toml extension",
+            )
+            .into());
         }
-        
+
         let content = std::fs::read_to_string(canonical_path)?;
         let config = toml::from_str(&content)?;
         Ok(config)

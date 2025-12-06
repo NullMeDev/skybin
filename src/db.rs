@@ -213,7 +213,18 @@ BEGIN
     );
 END;
 
-INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', '004');
+-- Deduplication metrics (counts of different rejection reasons)
+CREATE TABLE IF NOT EXISTS dedup_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    metric_type TEXT NOT NULL,  -- 'exact', 'near_dup_rejected', 'near_dup_accepted'
+    count INTEGER DEFAULT 1,
+    timestamp INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_dedup_metrics_type ON dedup_metrics(metric_type);
+CREATE INDEX IF NOT EXISTS idx_dedup_metrics_timestamp ON dedup_metrics(timestamp DESC);
+
+INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', '005');
 INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 "#,
         )?;
@@ -873,6 +884,41 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
             .prepare("SELECT 1 FROM pastes WHERE content_hash = ? LIMIT 1")?;
         let exists = stmt.exists(params![hash])?;
         Ok(exists)
+    }
+
+    /// Record a deduplication event
+    pub fn record_dedup_metric(&mut self, metric_type: &str) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+        self.conn.execute(
+            "INSERT INTO dedup_metrics (metric_type, timestamp) VALUES (?, ?)",
+            params![metric_type, now],
+        )?;
+        Ok(())
+    }
+
+    /// Get dedup statistics for the last 24 hours
+    pub fn get_dedup_stats(&self) -> Result<(i64, i64, i64)> {
+        let cutoff = chrono::Utc::now().timestamp() - (24 * 3600);
+        
+        let exact: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM dedup_metrics WHERE metric_type = 'exact' AND timestamp > ?",
+            params![cutoff],
+            |row| row.get(0),
+        )?;
+        
+        let near_dup_rejected: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM dedup_metrics WHERE metric_type = 'near_dup_rejected' AND timestamp > ?",
+            params![cutoff],
+            |row| row.get(0),
+        )?;
+        
+        let near_dup_accepted: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM dedup_metrics WHERE metric_type = 'near_dup_accepted' AND timestamp > ?",
+            params![cutoff],
+            |row| row.get(0),
+        )?;
+        
+        Ok((exact, near_dup_rejected, near_dup_accepted))
     }
 }
 

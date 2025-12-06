@@ -50,6 +50,17 @@ paste_rs = true       # Rust community
 paste2 = true         # General purpose
 pastebin_pl = true    # Polish pastebin
 quickpaste = true     # Quick pastes
+psbdmp = true         # Pastebindump aggregator
+tor_pastes = true     # Onion paste sites
+pastesio = true       # Pastes.io
+bpast = true          # Bpast aggregator
+
+# New scrapers (v2.5.0)
+pastefs = true        # PasteFS
+kbinbin = true        # Kbinbin aggregator
+snippet = true        # Snippet.host
+privatebin = true     # PrivateBin instances
+zerobin = true        # ZeroBin/0bin instances
 
 # Note: external_url scraper is always enabled
 # Submit paste URLs via POST /api/submit-url

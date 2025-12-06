@@ -136,6 +136,18 @@
                 <h3 id="stat-sensitive">-</h3>
                 <p>Sensitive</p>
             </div>
+            <div class="stat-card">
+                <h3 id="stat-dedup-exact">-</h3>
+                <p>Exact Dedup (24h)</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="stat-dedup-near-reject">-</h3>
+                <p>Near-Dup Rejected (24h)</p>
+            </div>
+            <div class="stat-card">
+                <h3 id="stat-dedup-near-accept">-</h3>
+                <p>Near-Dup Accepted (24h)</p>
+            </div>
         </div>
 
         <div class="section">
@@ -432,6 +444,9 @@
                     document.getElementById('stat-pastes').textContent = data.data.total_pastes;
                     document.getElementById('stat-comments').textContent = data.data.total_comments;
                     document.getElementById('stat-sensitive').textContent = data.data.sensitive_pastes;
+                    document.getElementById('stat-dedup-exact').textContent = data.data.dedup_exact_24h || 0;
+                    document.getElementById('stat-dedup-near-reject').textContent = data.data.dedup_near_rejected_24h || 0;
+                    document.getElementById('stat-dedup-near-accept').textContent = data.data.dedup_near_accepted_24h || 0;
                 }
             } catch (e) {
                 showToast('Failed to load stats', true);

@@ -2,6 +2,40 @@
 
 All notable changes to SkyBin will be documented in this file.
 
+## [2.5.0] - 2025-12-06
+
+### Added
+- **3-Tier Deduplication System** - Advanced multi-level duplicate detection
+  - **Tier 1**: Exact content hash matching (normalized SHA256) - unchanged
+  - **Tier 2**: Near-duplicate detection via SimHash with Hamming distance threshold
+    - Sliding window of 500 recent pastes for comparison
+    - Configurable Hamming distance threshold (default: ≤6 bits)
+    - Catches minor edits, whitespace changes, and slight variations
+  - **Tier 3**: Per-secret gating for near-duplicates
+    - Extracts and deduplicates individual secrets within similar content
+    - Only stores pastes with new, unseen secrets
+    - Writes new secrets to categorized files even if paste is dropped
+- **5 New Paste Site Scrapers** - Expanded coverage to 35+ sources
+  - **PasteFS** (pastefs.com) - Simple paste site with recent feed API
+  - **Kbinbin** (kbinbin.com) - Paste aggregator with HTML parsing
+  - **Snippet** (snippet.host) - Minimalist paste service
+  - **PrivateBin** (privatebin.net) - Encrypted pastebin with directory endpoint
+  - **ZeroBin** (0bin.net/zerobin.net) - Multi-instance encrypted paste discovery
+
+### Changed
+- Scheduler now preserves raw data (no auto-redaction by default)
+- Near-duplicate detection triggers per-secret extraction pipeline
+- Dedup metrics available for future admin dashboard integration
+
+### Technical
+- New `src/dedup.rs` module with fast 64-bit SimHash implementation
+- Added `fxhash` dependency for non-cryptographic hashing
+- Added `base64` dependency for PrivateBin decoding
+- Config fields added: `pastefs`, `kbinbin`, `snippet`, `privatebin`, `zerobin`
+- All tests passing including new simhash unit tests
+
+---
+
 ## [2.4.1] - 2025-12-06
 
 ### Security
