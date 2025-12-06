@@ -265,6 +265,7 @@ async fn main() -> anyhow::Result<()> {
         url_scraper: Some(external_scraper),
         admin,
         rate_limiters,
+        config: Arc::new(config.clone()),
     };
     println!("✓ Web server state created");
 

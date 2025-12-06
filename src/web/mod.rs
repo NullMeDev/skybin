@@ -20,6 +20,7 @@ pub struct AppState {
     pub url_scraper: Option<Arc<crate::scrapers::ExternalUrlScraper>>,
     pub admin: Option<Arc<crate::admin::AdminAuth>>,
     pub rate_limiters: Arc<crate::rate_limiter::ApiRateLimiters>,
+    pub config: Arc<crate::config::Config>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

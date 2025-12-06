@@ -234,6 +234,7 @@ pub struct CreatePasteResponse {
 }
 
 /// POST /api/paste - Submit new paste (JSON API)
+#[axum::debug_handler]
 pub async fn upload_paste_json(
     State(state): State<AppState>,
     Json(payload): Json<UploadRequest>,
@@ -244,19 +245,58 @@ pub async fn upload_paste_json(
     // Rate limit check (use "global" key since we don't track IPs for anonymity)
     if !state.rate_limiters.upload.check("global") {
         return Err(ApiError(
-            "Rate limit exceeded. Try again later.".to_string(),
+            "Rate limit exceeded. Try again later".to_string(),
         ));
     }
-
-    let mut db = state
-        .db
-        .lock()
-        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
 
     // Validate content
     if payload.content.is_empty() {
         return Err(ApiError("Content cannot be empty".to_string()));
     }
+
+    // Check content size against max upload limit
+    let max_size = state.config.server.max_upload_size.unwrap_or(400 * 1024 * 1024); // Default 400MB
+    if payload.content.len() > max_size {
+        return Err(ApiError(format!(
+            "Content exceeds maximum upload size of {}MB",
+            max_size / (1024 * 1024)
+        )));
+    }
+
+    // VirusTotal scan if enabled (BEFORE acquiring DB lock)
+    if state.config.server.enable_virustotal_scan.unwrap_or(false) {
+        if let Some(api_key) = &state.config.apis.virustotal_api_key {
+            let vt = crate::virustotal::VirusTotalClient::new(api_key.clone(), true);
+            
+            // Use title or generate temporary filename for scan
+            let filename = payload.title.clone().unwrap_or_else(|| "paste.txt".to_string());
+            
+            match vt.scan_file(payload.content.as_bytes(), &filename).await {
+                Ok(result) => {
+                    if !result.is_safe {
+                        tracing::warn!(
+                            "VirusTotal detected malicious content: {} malicious, {} suspicious",
+                            result.malicious_count, result.suspicious_count
+                        );
+                        return Err(ApiError(
+                            "Content flagged as malicious by VirusTotal scan".to_string(),
+                        ));
+                    }
+                    tracing::info!("VirusTotal scan passed for upload");
+                }
+                Err(e) => {
+                    // Log error but don't block upload - VT may be rate limited or down
+                    tracing::warn!("VirusTotal scan failed: {}, proceeding with upload", e);
+                }
+            }
+        }
+    }
+
+    // Now acquire DB lock after async operations
+    let mut db = state
+        .db
+        .lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
 
     // Anonymize user submission (sanitize title, remove any PII)
     let mut title = payload.title;
@@ -490,7 +530,7 @@ pub async fn get_pastes_html(
 
     let limit = filters.limit.unwrap_or(25).min(100);
     let offset = filters.offset.unwrap_or(0);
-    let page = offset / limit;
+    let _page = offset / limit;
 
     let pastes = if filters.high_value.unwrap_or(false) {
         db.get_high_value_pastes(limit, offset)

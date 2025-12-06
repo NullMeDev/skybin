@@ -36,14 +36,10 @@ pub struct ServerConfig {
     pub host: String,
     pub port: u16,
     pub max_paste_size: usize,
-    #[serde(default = "default_max_upload_size")]
-    pub max_upload_size: usize,
-    #[serde(default = "default_true")]
-    pub enable_virustotal_scan: bool,
-}
-
-fn default_max_upload_size() -> usize {
-    400 * 1024 * 1024 // 400MB
+    #[serde(default)]
+    pub max_upload_size: Option<usize>,
+    #[serde(default)]
+    pub enable_virustotal_scan: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,7 +214,7 @@ pub struct ApisConfig {
     pub pastebin_api_key: String,
     pub github_token: String,
     #[serde(default)]
-    pub virustotal_api_key: String,
+    pub virustotal_api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
