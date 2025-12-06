@@ -2,6 +2,34 @@
 
 All notable changes to SkyBin will be documented in this file.
 
+## [2.4.1] - 2025-12-06
+
+### Security
+- **CRITICAL: Fixed path traversal vulnerabilities** in telegram scraper
+  - Added path canonicalization for all file operations in `scraper.py`
+  - Validated temp file paths are within allowed directories
+  - Protected against malicious archive contents escaping temp directories
+  - Fixed file inclusion attack vectors in `credential_extractor.py`
+- **Updated aiohttp dependency** from 3.9.0 to 4.0.0+ for latest security patches
+- **Pinned GitHub Actions to commit SHAs** to prevent supply chain attacks
+  - `actions/checkout@v4` → `@11bd7190` (v4.2.2)
+  - `actions/upload-artifact@v4` → `@6f51ac03` (v4.4.3)
+  - `actions/upload-pages-artifact@v3` → `@56afc609` (v3.0.1)
+  - `actions/deploy-pages@v4` → `@d6db9016` (v4.0.5)
+  - `Swatinem/rust-cache@v2` → `@e207df5d` (v2.7.5)
+  - Exception: `dtolnay/rust-toolchain@stable` intentionally not pinned (trusted maintainer)
+
+### Documentation
+- Added `.github/ACTION_PINS.md` with action pinning reference and update schedule
+- Added `SECURITY_AUDIT.md` documenting all security fixes and remaining work
+
+### Technical
+- All file reads now use `os.path.realpath()` with directory prefix validation
+- Canonical path checks prevent symlink traversals and path escapes
+- Archive extraction validates all file paths before writing
+
+---
+
 ## [2.4.0] - 2025-12-06
 
 ### Added

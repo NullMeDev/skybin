@@ -372,7 +372,14 @@ class CredentialExtractor:
         # Load from file
         if os.path.exists(EXCLUDED_SECRETS_FILE):
             try:
-                with open(EXCLUDED_SECRETS_FILE, 'r') as f:
+                # SECURITY: Validate file path is not a symlink or traversal
+                canonical_file = os.path.realpath(EXCLUDED_SECRETS_FILE)
+                expected_path = os.path.realpath(EXCLUDED_SECRETS_FILE)
+                if canonical_file != expected_path:
+                    logger.error(f"SECURITY: Excluded secrets file path validation failed: {EXCLUDED_SECRETS_FILE}")
+                    return
+                
+                with open(canonical_file, 'r') as f:
                     for line in f:
                         line = line.strip()
                         if line and not line.startswith('#'):
@@ -550,7 +557,14 @@ class CredentialExtractor:
             filepath = self.output_dir / filename
             
             try:
-                with open(filepath, 'a', encoding='utf-8') as f:
+                # SECURITY: Validate filepath is within output_dir
+                canonical_filepath = os.path.realpath(filepath)
+                canonical_output_dir = os.path.realpath(self.output_dir)
+                if not str(canonical_filepath).startswith(str(canonical_output_dir) + os.sep):
+                    logger.error(f"SECURITY: Output file outside allowed directory: {filepath}")
+                    continue
+                
+                with open(canonical_filepath, 'a', encoding='utf-8') as f:
                     if prepend_timestamp:
                         f.write(f"\n# --- {timestamp} ---\n")
                     

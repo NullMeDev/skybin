@@ -25,11 +25,11 @@ jobs:
     name: Build Documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
       
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable  # Intentionally not pinned - trusted maintainer
       
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e207df5d269b42b69c8bc5101da26f7d31feddb4  # v2.7.5
       
       - name: Generate documentation
         run: cargo doc --no-deps --document-private-items
@@ -235,7 +235,7 @@ jobs:
           cp -r target/doc target/doc-site/docs 2>/dev/null || true
       
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa  # v3.0.1
         with:
           path: target/doc-site
 
@@ -249,4 +249,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e  # v4.0.5

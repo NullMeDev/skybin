@@ -905,6 +905,15 @@ class TelegramScraper:
             with tempfile.NamedTemporaryFile(suffix=ext, prefix=TEMP_FILE_PREFIX, delete=False, dir=TEMP_DIR) as tmp:
                 tmp_path = tmp.name
             
+            # SECURITY: Validate tmp_path is within TEMP_DIR
+            canonical_tmp = os.path.realpath(tmp_path)
+            canonical_temp_dir = os.path.realpath(TEMP_DIR)
+            if not canonical_tmp.startswith(canonical_temp_dir + os.sep):
+                logger.error(f"SECURITY: Temp file outside allowed directory: {tmp_path}")
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+                return None
+            
             async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=DOWNLOAD_TIMEOUT)) as resp:
                 if resp.status != 200:
                     if tmp_path and os.path.exists(tmp_path):
@@ -915,7 +924,7 @@ class TelegramScraper:
                 downloaded = 0
                 last_log = 0
                 
-                with open(tmp_path, 'wb') as f:
+                with open(canonical_tmp, 'wb') as f:
                     async for chunk in resp.content.iter_chunked(1024 * 1024):  # 1MB chunks
                         f.write(chunk)
                         downloaded += len(chunk)
@@ -1041,11 +1050,20 @@ class TelegramScraper:
                         tmp.write(buffer.read())
                         tmp_path = tmp.name
                     
+                    # SECURITY: Validate tmp_path is within TEMP_DIR
+                    canonical_tmp = os.path.realpath(tmp_path)
+                    canonical_temp_dir = os.path.realpath(TEMP_DIR)
+                    if not canonical_tmp.startswith(canonical_temp_dir + os.sep):
+                        logger.error(f"SECURITY: Temp file outside allowed directory: {tmp_path}")
+                        if os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
+                        return 0
+                    
                     # Clear buffer to free memory
                     buffer.seek(0)
                     buffer.truncate(0)
                     
-                    with rarfile.RarFile(tmp_path, 'r') as rf:
+                    with rarfile.RarFile(canonical_tmp, 'r') as rf:
                         for info in rf.infolist():
                             # Skip directories and large files
                             if info.is_dir() or info.file_size > MAX_FILE_SIZE:
@@ -1310,14 +1328,21 @@ class TelegramScraper:
                 fpath = os.path.join(tmpdir, files[0])
                 fname = files[0]
                 
+                # SECURITY: Validate fpath is within tmpdir
+                canonical_fpath = os.path.realpath(fpath)
+                canonical_tmpdir = os.path.realpath(tmpdir)
+                if not canonical_fpath.startswith(canonical_tmpdir + os.sep):
+                    logger.error(f"SECURITY: Downloaded file outside temp directory: {fpath}")
+                    return None, None
+                
                 # Check size
-                fsize = os.path.getsize(fpath)
+                fsize = os.path.getsize(canonical_fpath)
                 if fsize > MAX_ARCHIVE_SIZE:
                     logger.info(f"  Skipping large mega file: {fname} ({fsize / 1024 / 1024:.1f}MB)")
                     return None, None
                 
                 # Read file
-                with open(fpath, 'rb') as f:
+                with open(canonical_fpath, 'rb') as f:
                     data = f.read()
                 
                 return data, fname
