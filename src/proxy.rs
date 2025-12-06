@@ -102,7 +102,20 @@ impl ProxyRotator {
 
     /// Load proxies from a file (one per line)
     pub fn load_from_file(&self, path: &str) -> std::io::Result<()> {
-        let content = std::fs::read_to_string(path)?;
+        // Security: Canonicalize path to prevent traversal attacks
+        let path_buf = std::path::PathBuf::from(path);
+        let canonical_path = std::fs::canonicalize(&path_buf)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::PermissionDenied,
+                format!("Invalid proxy file path: {}", e)))?;
+        
+        // Security: Ensure file is .txt or no extension
+        let ext = canonical_path.extension().and_then(|s| s.to_str());
+        if ext.is_some() && ext != Some("txt") {
+            return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied,
+                "Proxy file must be .txt or have no extension"));
+        }
+        
+        let content = std::fs::read_to_string(canonical_path)?;
         let list: Vec<String> = content
             .lines()
             .map(|l| l.trim().to_string())

@@ -257,7 +257,18 @@ pub struct CustomPattern {
 impl Config {
     /// Load configuration from a TOML file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = std::fs::read_to_string(path)?;
+        // Security: Canonicalize path to prevent traversal attacks
+        let canonical_path = std::fs::canonicalize(path)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::PermissionDenied, 
+                format!("Invalid config path: {}", e)))?;
+        
+        // Security: Ensure config file has .toml extension
+        if canonical_path.extension().and_then(|s| s.to_str()) != Some("toml") {
+            return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied,
+                "Config file must have .toml extension").into());
+        }
+        
+        let content = std::fs::read_to_string(canonical_path)?;
         let config = toml::from_str(&content)?;
         Ok(config)
     }

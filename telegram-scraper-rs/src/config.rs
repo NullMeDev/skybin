@@ -60,7 +60,16 @@ impl Default for ScraperConfig {
 
 impl Config {
     pub fn load<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
-        let content = std::fs::read_to_string(path)?;
+        // Security: Canonicalize path to prevent traversal attacks
+        let canonical_path = std::fs::canonicalize(path)
+            .map_err(|e| anyhow::anyhow!("Invalid config path: {}", e))?;
+        
+        // Security: Ensure config file has .toml extension
+        if canonical_path.extension().and_then(|s| s.to_str()) != Some("toml") {
+            return Err(anyhow::anyhow!("Config file must have .toml extension"));
+        }
+        
+        let content = std::fs::read_to_string(canonical_path)?;
         let config: Config = toml::from_str(&content)?;
         Ok(config)
     }

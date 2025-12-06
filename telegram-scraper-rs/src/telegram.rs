@@ -35,7 +35,19 @@ impl TelegramScraper {
     pub async fn connect(config: AppConfig, stats: SharedStats) -> anyhow::Result<(Self, mpsc::Receiver<FileMessage>)> {
         info!("🔌 Connecting to Telegram...");
         
-        let session = if Path::new(&config.telegram.session_file).exists() {
+        // Security: Validate session file path
+        let session_path = Path::new(&config.telegram.session_file);
+        let session = if session_path.exists() {
+            // Security: Canonicalize to prevent traversal
+            let canonical = std::fs::canonicalize(session_path)
+                .map_err(|e| anyhow::anyhow!("Invalid session file path: {}", e))?;
+            
+            // Security: Ensure session file is in current directory or subdirectory
+            let current_dir = std::env::current_dir()?;
+            if !canonical.starts_with(&current_dir) {
+                return Err(anyhow::anyhow!("Session file must be in current directory or subdirectory"));
+            }
+            
             Session::load_file(&config.telegram.session_file)?
         } else {
             Session::new()
