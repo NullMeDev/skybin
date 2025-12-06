@@ -224,7 +224,17 @@ CREATE TABLE IF NOT EXISTS dedup_metrics (
 CREATE INDEX IF NOT EXISTS idx_dedup_metrics_type ON dedup_metrics(metric_type);
 CREATE INDEX IF NOT EXISTS idx_dedup_metrics_timestamp ON dedup_metrics(timestamp DESC);
 
-INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', '005');
+-- Deletion tokens for user-uploaded pastes (Phase 7)
+CREATE TABLE IF NOT EXISTS deletion_tokens (
+    token TEXT PRIMARY KEY,
+    paste_id TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (paste_id) REFERENCES pastes(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_deletion_tokens_paste_id ON deletion_tokens(paste_id);
+
+INSERT OR REPLACE INTO metadata (key, value) VALUES ('schema_version', '006');
 INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 "#,
         )?;
@@ -563,6 +573,42 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
             })?
             .collect::<SqlResult<Vec<_>>>()?;
         Ok(comments)
+    }
+
+    // === DELETION TOKEN METHODS (Phase 7) ===
+
+    /// Store deletion token for a paste
+    pub fn store_deletion_token(&mut self, token: &str, paste_id: &str) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+        self.conn.execute(
+            "INSERT INTO deletion_tokens (token, paste_id, created_at) VALUES (?, ?, ?)",
+            params![token, paste_id, now],
+        )?;
+        Ok(())
+    }
+
+    /// Delete paste by deletion token (user self-delete)
+    pub fn delete_paste_by_token(&mut self, token: &str) -> Result<bool> {
+        // Get paste_id from token
+        let paste_id: Result<String> = self
+            .conn
+            .query_row(
+                "SELECT paste_id FROM deletion_tokens WHERE token = ?",
+                params![token],
+                |row| row.get(0),
+            )
+            .map_err(|e| e.into());
+
+        match paste_id {
+            Ok(id) => {
+                // Delete paste (cascades to deletion_tokens)
+                let changes = self
+                    .conn
+                    .execute("DELETE FROM pastes WHERE id = ?", params![id])?;
+                Ok(changes > 0)
+            }
+            Err(_) => Ok(false), // Token not found
+        }
     }
 
     // === ADMIN METHODS ===

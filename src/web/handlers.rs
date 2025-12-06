@@ -244,6 +244,10 @@ pub async fn raw_paste(
 pub struct CreatePasteResponse {
     pub id: String,
     pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deletion_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deletion_url: Option<String>,
 }
 
 /// POST /api/paste - Submit new paste (JSON API)
@@ -253,7 +257,6 @@ pub async fn upload_paste_json(
     Json(payload): Json<UploadRequest>,
 ) -> Result<(StatusCode, Json<ApiResponse<CreatePasteResponse>>), ApiError> {
     use chrono::Utc;
-    use uuid::Uuid;
 
     // Rate limit check (use "global" key since we don't track IPs for anonymity)
     if !state.rate_limiters.upload.check("global") {
@@ -340,10 +343,12 @@ pub async fn upload_paste_json(
 
     // Check if this exact content already exists
     if let Ok(Some(existing)) = db.get_paste_by_hash(&content_hash) {
-        // Return existing paste instead of error
+        // Return existing paste instead of error (no deletion token for existing)
         let response = CreatePasteResponse {
             id: existing.id.clone(),
             url: format!("/paste/{}", existing.id),
+            deletion_token: None,
+            deletion_url: None,
         };
         return Ok((StatusCode::OK, Json(ApiResponse::ok(response))));
     }
@@ -378,6 +383,12 @@ pub async fn upload_paste_json(
         }
     })?;
 
+    // Generate deletion token for user-uploaded pastes (Phase 7)
+    use uuid::Uuid;
+    let deletion_token = Uuid::new_v4().to_string();
+    db.store_deletion_token(&deletion_token, &id)
+        .map_err(|e| ApiError(format!("Failed to store deletion token: {}", e)))?;
+
     // Broadcast paste event to WebSocket clients
     let event = crate::realtime::RealtimeEvent::paste_added(&paste);
     state.realtime.broadcast(event);
@@ -385,6 +396,8 @@ pub async fn upload_paste_json(
     let response = CreatePasteResponse {
         id: id.clone(),
         url: format!("/paste/{}", id),
+        deletion_token: Some(deletion_token.clone()),
+        deletion_url: Some(format!("/api/delete/{}", deletion_token)),
     };
     Ok((StatusCode::CREATED, Json(ApiResponse::ok(response))))
 }
@@ -1043,6 +1056,147 @@ pub async fn export_csv(
     ))
 }
 
+/// GET /api/export/bulk/json - Export multiple pastes as JSON (search results)
+pub async fn export_bulk_json(
+    State(state): State<AppState>,
+    Query(filters): Query<SearchFilters>,
+) -> Result<impl IntoResponse, ApiError> {
+    let db = state
+        .db
+        .lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+
+    // Limit bulk export to 1000 pastes
+    let mut search_filters = filters.clone();
+    search_filters.limit = Some(search_filters.limit.unwrap_or(100).min(1000));
+
+    let pastes = db
+        .search_pastes(&search_filters)
+        .map_err(|e| ApiError(format!("Failed to search pastes: {}", e)))?;
+
+    let export_data: Vec<serde_json::Value> = pastes
+        .iter()
+        .map(|p| {
+            serde_json::json!({
+                "id": p.id,
+                "title": p.title,
+                "source": p.source,
+                "syntax": p.syntax,
+                "content": p.content,
+                "created_at": p.created_at,
+                "is_sensitive": p.is_sensitive,
+                "high_value": p.high_value,
+                "matched_patterns": p.matched_patterns,
+            })
+        })
+        .collect();
+
+    let json = serde_json::json!({
+        "export_date": chrono::Utc::now().timestamp(),
+        "count": export_data.len(),
+        "pastes": export_data,
+    });
+
+    let filename = format!(
+        "attachment; filename=\"skybin-export-{}.json\"",
+        chrono::Utc::now().format("%Y%m%d-%H%M%S")
+    );
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/json".to_string()),
+            (header::CONTENT_DISPOSITION, filename),
+        ],
+        serde_json::to_string_pretty(&json).unwrap_or_default(),
+    ))
+}
+
+/// GET /api/export/bulk/csv - Export multiple pastes as CSV (search results)
+pub async fn export_bulk_csv(
+    State(state): State<AppState>,
+    Query(filters): Query<SearchFilters>,
+) -> Result<impl IntoResponse, ApiError> {
+    let db = state
+        .db
+        .lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+
+    // Limit bulk export to 1000 pastes
+    let mut search_filters = filters.clone();
+    search_filters.limit = Some(search_filters.limit.unwrap_or(100).min(1000));
+
+    let pastes = db
+        .search_pastes(&search_filters)
+        .map_err(|e| ApiError(format!("Failed to search pastes: {}", e)))?;
+
+    // CSV format: id,title,source,syntax,is_sensitive,high_value,created_at,content_preview
+    let mut csv = String::from(
+        "id,title,source,syntax,is_sensitive,high_value,created_at,content_preview\n",
+    );
+
+    for paste in &pastes {
+        let title = paste.title.as_deref().unwrap_or("Untitled").replace('"', "\"\"");
+        let preview = paste
+            .content
+            .lines()
+            .take(3)
+            .collect::<Vec<_>>()
+            .join(" ")
+            .chars()
+            .take(100)
+            .collect::<String>()
+            .replace('"', "\"\"");
+
+        csv.push_str(&format!(
+            "{},\"{}\",{},{},{},{},{},\"{}\"\n",
+            paste.id,
+            title,
+            paste.source,
+            paste.syntax,
+            paste.is_sensitive,
+            paste.high_value,
+            paste.created_at,
+            preview
+        ));
+    }
+
+    let filename = format!(
+        "attachment; filename=\"skybin-export-{}.csv\"",
+        chrono::Utc::now().format("%Y%m%d-%H%M%S")
+    );
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, "text/csv".to_string()),
+            (header::CONTENT_DISPOSITION, filename),
+        ],
+        csv,
+    ))
+}
+
+/// DELETE /api/delete/:token - Delete paste using deletion token (poster self-delete)
+pub async fn delete_paste_with_token(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+) -> Result<Json<ApiResponse<String>>, ApiError> {
+    let mut db = state
+        .db
+        .lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+
+    let deleted = db
+        .delete_paste_by_token(&token)
+        .map_err(|e| ApiError(format!("Failed to delete paste: {}", e)))?;
+
+    if deleted {
+        Ok(Json(ApiResponse::ok(
+            "Paste deleted successfully".to_string(),
+        )))
+    } else {
+        Err(ApiError("Invalid deletion token or paste not found".to_string()))
+    }
+}
+
 /// POST /api/submit-url - Submit paste URLs for monitoring
 pub async fn submit_url(
     State(state): State<AppState>,
@@ -1379,6 +1533,8 @@ pub async fn admin_create_staff_post(
         let response = CreatePasteResponse {
             id: existing.id.clone(),
             url: format!("/paste/{}", existing.id),
+            deletion_token: None,  // No token for existing or staff posts
+            deletion_url: None,
         };
         return Ok((StatusCode::OK, Json(ApiResponse::ok(response))));
     }
@@ -1416,6 +1572,8 @@ pub async fn admin_create_staff_post(
     let response = CreatePasteResponse {
         id: id.clone(),
         url: format!("/paste/{}", id),
+        deletion_token: None,  // No deletion token for staff posts
+        deletion_url: None,
     };
     Ok((StatusCode::CREATED, Json(ApiResponse::ok(response))))
 }

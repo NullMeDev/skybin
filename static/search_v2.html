@@ -193,6 +193,8 @@
                 <button class="toolbar-btn" id="toggle-filters">⚙ Filters</button>
                 <button class="toolbar-btn" id="save-search">💾 Save Search</button>
                 <button class="toolbar-btn" id="clear-filters">✖ Clear Filters</button>
+                <button class="toolbar-btn" id="export-json">📥 Export JSON</button>
+                <button class="toolbar-btn" id="export-csv">📄 Export CSV</button>
             </div>
 
             <!-- Advanced Filters Panel -->
@@ -516,6 +518,24 @@
         document.getElementById('clear-filters').addEventListener('click', () => {
             document.querySelectorAll('.filter-field select, .filter-field input').forEach(el => el.value = '');
             activeFilters = {};
+        });
+
+        document.getElementById('export-json').addEventListener('click', () => {
+            collectFilters();
+            let url = `${API_BASE}/export/bulk/json?q=${encodeURIComponent(currentQuery)}`;
+            Object.keys(activeFilters).forEach(key => {
+                url += `&${key}=${encodeURIComponent(activeFilters[key])}`;
+            });
+            window.location.href = url;
+        });
+
+        document.getElementById('export-csv').addEventListener('click', () => {
+            collectFilters();
+            let url = `${API_BASE}/export/bulk/csv?q=${encodeURIComponent(currentQuery)}`;
+            Object.keys(activeFilters).forEach(key => {
+                url += `&${key}=${encodeURIComponent(activeFilters[key])}`;
+            });
+            window.location.href = url;
         });
 
         document.getElementById('prev-btn').addEventListener('click', () => {

@@ -101,12 +101,15 @@ pub fn create_router(state: AppState) -> Router {
         // POST endpoints
         .route("/api/paste", post(handlers::upload_paste_json))
         .route("/api/upload", post(handlers::upload_paste_json))
+        .route("/api/delete/:token", delete(handlers::delete_paste_with_token))
         .route("/api/submit-url", post(handlers::submit_url))
         // Comments
         .route("/api/paste/:id/comments", get(handlers::get_comments).post(handlers::add_comment))
         // Export
         .route("/api/export/:id/json", get(handlers::export_json))
         .route("/api/export/:id/csv", get(handlers::export_csv))
+        .route("/api/export/bulk/json", get(handlers::export_bulk_json))
+        .route("/api/export/bulk/csv", get(handlers::export_bulk_csv))
         // Deduplication check for telegram scraper
         .route("/api/check-hash/:hash", get(handlers::check_hash))
         // Forward telegram invites to scraper

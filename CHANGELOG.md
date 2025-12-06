@@ -5,6 +5,19 @@ All notable changes to SkyBin will be documented in this file.
 ## [2.5.0] - 2025-12-06
 
 ### Added
+- **Phase 7: Poster Self-Delete** - Short-lived paste URLs with deletion tokens
+  - **Deletion Tokens**: UUID v4 tokens generated for all user uploads
+  - **Secure Delete Endpoint**: `DELETE /api/delete/:token` with token validation
+  - **deletion_tokens Table**: Store paste_id to token mapping with CASCADE delete
+  - **Response Fields**: deletion_token and deletion_url returned on paste creation
+  - **No Tokens for**: Scraped pastes or staff posts (user uploads only)
+- **Phase 6: Export Features** - Bulk JSON/CSV export for search results
+  - **Bulk JSON Export**: `/api/export/bulk/json?q=...` with search filters
+  - **Bulk CSV Export**: `/api/export/bulk/csv?q=...` with metadata
+  - **Export Limit**: 1000 pastes max per export (configurable)
+  - **CSV Format**: id, title, source, syntax, is_sensitive, high_value, created_at, content_preview
+  - **Search Integration**: Export buttons in advanced search UI (search_v2.html)
+  - **Timestamped Filenames**: skybin-export-YYYYMMDD-HHMMSS.{json|csv}
 - **Phase 5: Real-time WebSocket Feed** - Live paste streaming with filters and notifications
   - **WebSocket Endpoint**: `/api/ws` with query param filters (sensitive_only, high_value_only, source)
   - **RealtimeBroadcast System**: Tokio broadcast channels with 1000-message buffer
@@ -51,6 +64,17 @@ All notable changes to SkyBin will be documented in this file.
 - Dedup metrics available for future admin dashboard integration
 
 ### Technical
+- **Phase 7 Changes**:
+  - Database schema v006 with deletion_tokens table
+  - New DB methods: store_deletion_token(), delete_paste_by_token()
+  - CreatePasteResponse extended with Optional deletion_token and deletion_url
+  - UUID v4 token generation on user upload (not for scraped/staff pastes)
+  - Cascade delete ensures tokens removed when paste deleted
+- **Phase 6 Features**:
+  - Two new bulk export endpoints: export_bulk_json(), export_bulk_csv()
+  - Reuses SearchFilters for flexible export criteria
+  - Export buttons added to search_v2.html toolbar
+  - Timestamped filenames with chrono formatting
 - **Phase 5 Modules**:
   - New `src/realtime.rs` module with WebSocket broadcast system (254 lines)
   - Axum WebSocket support with `futures` for stream handling
