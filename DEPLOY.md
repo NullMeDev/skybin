@@ -1,6 +1,8 @@
-# SkyBin v2.4.0 Deployment Guide
+# SkyBin Deployment (v2.5.0)
 
-## Pre-Deployment Checklist
+> Note: This file was consolidated. See `DEPLOYMENT.md` for the authoritative, up-to-date guide for v2.5.0.
+
+## Quick Start
 
 ✅ All code committed and pushed
 ✅ Git tag v2.4.0 created
@@ -43,7 +45,9 @@ ALTER TABLE pastes ADD COLUMN high_value INTEGER DEFAULT 0;
 UPDATE metadata SET value = '004' WHERE key = 'schema_version';
 ```
 
-## Deployment Steps
+## Legacy steps (v2.4.x)
+
+These historical steps have been superseded by `DEPLOYMENT.md`. If you are deploying v2.5.0 or later, use that guide. Leaving legacy notes below for reference.
 
 1. **Build release binary locally:**
 ```bash
