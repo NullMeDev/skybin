@@ -11,6 +11,7 @@ pub mod patterns;
 pub mod proxy;
 pub mod quality;
 pub mod rate_limiter;
+pub mod realtime;
 pub mod scheduler;
 pub mod scrapers;
 pub mod search_history;

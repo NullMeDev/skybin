@@ -18,10 +18,11 @@ path = "src/main.rs"
 tokio = { version = "1.42", features = ["full"] }
 
 # Web framework
-axum = { version = "0.7", features = ["macros"] }
+axum = { version = "0.7", features = ["macros", "ws"] }
 axum-htmx = "0.6"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "compression-gzip", "set-header"] }
+futures = "0.3"
 
 # Templating
 askama = { version = "0.12", features = ["with-axum"] }

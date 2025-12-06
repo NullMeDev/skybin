@@ -21,6 +21,7 @@ pub struct AppState {
     pub admin: Option<Arc<crate::admin::AdminAuth>>,
     pub rate_limiters: Arc<crate::rate_limiter::ApiRateLimiters>,
     pub config: Arc<crate::config::Config>,
+    pub realtime: Arc<crate::realtime::RealtimeBroadcast>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -78,6 +79,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/changelog", get(handlers::serve_changelog))
         .route("/paste/:id", get(handlers::serve_paste))
         .route("/status", get(handlers::serve_status))
+        .route("/live", get(handlers::serve_live))
         .route("/disclaimer", get(handlers::serve_disclaimer))
         .route("/raw/:id", get(handlers::raw_paste))
         // Static assets
@@ -94,6 +96,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/health", get(health_check))
         .route("/api/scrapers/health", get(handlers::scraper_health))
         .route("/api/paste/:id", get(handlers::get_paste_api))
+        // WebSocket
+        .route("/api/ws", get(handlers::websocket_handler))
         // POST endpoints
         .route("/api/paste", post(handlers::upload_paste_json))
         .route("/api/upload", post(handlers::upload_paste_json))

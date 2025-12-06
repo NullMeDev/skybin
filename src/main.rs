@@ -275,6 +275,10 @@ async fn main() -> anyhow::Result<()> {
     let rate_limiters = Arc::new(ApiRateLimiters::new());
     println!("✓ API rate limiters initialized");
 
+    // Initialize real-time broadcast
+    let realtime = Arc::new(skybin::realtime::RealtimeBroadcast::new());
+    println!("✓ Real-time broadcast initialized");
+
     // Create web server state
     let app_state = AppState {
         db: db.clone(),
@@ -282,6 +286,7 @@ async fn main() -> anyhow::Result<()> {
         admin,
         rate_limiters,
         config: Arc::new(config.clone()),
+        realtime: realtime.clone(),
     };
     println!("✓ Web server state created");
 

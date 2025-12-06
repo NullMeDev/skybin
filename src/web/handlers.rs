@@ -1,9 +1,10 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, Path, Query, State},
     http::{header, StatusCode},
     response::{Html, IntoResponse},
     Json,
 };
+use futures::{sink::SinkExt, stream::StreamExt};
 use serde::{Deserialize, Serialize};
 
 use super::{ApiError, ApiResponse, AppState};
@@ -82,6 +83,7 @@ const CHANGELOG_HTML: &str = include_str!("../../static/changelog.html");
 const STATUS_HTML: &str = include_str!("../../static/status.html");
 const ADMIN_HTML: &str = include_str!("../../static/admin.html");
 const DISCLAIMER_HTML: &str = include_str!("../../static/disclaimer.html");
+const LIVE_HTML: &str = include_str!("../../static/live.html");
 
 /// GET / - Dashboard HTML page
 pub async fn serve_index() -> impl IntoResponse {
@@ -121,6 +123,11 @@ pub async fn serve_disclaimer() -> impl IntoResponse {
 /// GET /x - Admin panel (hidden)
 pub async fn serve_admin() -> impl IntoResponse {
     Html(ADMIN_HTML)
+}
+
+/// GET /live - Live feed page
+pub async fn serve_live() -> impl IntoResponse {
+    Html(LIVE_HTML)
 }
 
 /// GET /api/pastes - Recent pastes feed (JSON API)
@@ -370,6 +377,10 @@ pub async fn upload_paste_json(
             ApiError(format!("Failed to store paste: {}", e))
         }
     })?;
+
+    // Broadcast paste event to WebSocket clients
+    let event = crate::realtime::RealtimeEvent::paste_added(&paste);
+    state.realtime.broadcast(event);
 
     let response = CreatePasteResponse {
         id: id.clone(),
@@ -1785,4 +1796,86 @@ pub async fn forward_telegram_invite(
             message: format!("Could not reach scraper: {}", e),
         }))),
     }
+}
+
+// ======================
+// WebSocket Real-time Feed
+// ======================
+
+/// GET /api/ws - WebSocket endpoint for real-time paste streaming
+pub async fn websocket_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    Query(filter): Query<crate::realtime::WebSocketFilter>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_socket(socket, state, filter))
+}
+
+async fn handle_socket(
+    socket: WebSocket,
+    state: AppState,
+    filter: crate::realtime::WebSocketFilter,
+) {
+    let (mut sender, mut receiver) = socket.split();
+    let mut rx = state.realtime.subscribe();
+
+    // Track connection
+    state.realtime.connect().await;
+    let connection_count = state.realtime.connection_count().await;
+    tracing::info!("WebSocket connected (active: {})", connection_count);
+
+    // Send initial welcome message
+    let welcome = crate::realtime::RealtimeEvent::Ping {
+        timestamp: chrono::Utc::now().timestamp(),
+    };
+    if let Ok(json) = serde_json::to_string(&welcome) {
+        let _ = sender.send(Message::Text(json)).await;
+    }
+
+    // Spawn task to send broadcast messages
+    let mut send_task = tokio::spawn(async move {
+        while let Ok(event) = rx.recv().await {
+            // Apply filters
+            if !filter.matches(&event) {
+                continue;
+            }
+
+            // Serialize and send
+            match serde_json::to_string(&event) {
+                Ok(json) => {
+                    if sender.send(Message::Text(json)).await.is_err() {
+                        break; // Client disconnected
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to serialize event: {}", e);
+                    break;
+                }
+            }
+        }
+    });
+
+    // Spawn task to handle incoming messages (mostly pings/close)
+    let mut recv_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            match msg {
+                Message::Close(_) => break,
+                Message::Ping(_data) => {
+                    // Echo pong (handled automatically by axum)
+                }
+                _ => {} // Ignore other messages
+            }
+        }
+    });
+
+    // Wait for either task to finish
+    tokio::select! {
+        _ = &mut send_task => recv_task.abort(),
+        _ = &mut recv_task => send_task.abort(),
+    }
+
+    // Track disconnection
+    state.realtime.disconnect().await;
+    let connection_count = state.realtime.connection_count().await;
+    tracing::info!("WebSocket disconnected (active: {})", connection_count);
 }

@@ -5,6 +5,16 @@ All notable changes to SkyBin will be documented in this file.
 ## [2.5.0] - 2025-12-06
 
 ### Added
+- **Phase 5: Real-time WebSocket Feed** - Live paste streaming with filters and notifications
+  - **WebSocket Endpoint**: `/api/ws` with query param filters (sensitive_only, high_value_only, source)
+  - **RealtimeBroadcast System**: Tokio broadcast channels with 1000-message buffer
+  - **Event Types**: PasteAdded, PasteViewed, StatsUpdate, Ping (heartbeat)
+  - **Connection Tracking**: Active WebSocket client count monitoring
+  - **Live Feed UI**: Animated real-time paste stream at `/live`
+  - **Client-side Filters**: All/Sensitive/Critical with pause/resume controls
+  - **Audio Notifications**: Optional beep alerts for critical pastes
+  - **Auto-reconnect**: 3-second reconnect on disconnect
+  - **Performance**: Max 100 items displayed, slideIn animations
 - **Phase 4: Advanced Search Improvements** - Enhanced search with modern UX features
   - **Autocomplete Search Suggestions**: Real-time query suggestions from patterns, sources, and search history
   - **Saved Searches**: Client-side localStorage persistence for frequently used searches with custom labels
@@ -41,6 +51,13 @@ All notable changes to SkyBin will be documented in this file.
 - Dedup metrics available for future admin dashboard integration
 
 ### Technical
+- **Phase 5 Modules**:
+  - New `src/realtime.rs` module with WebSocket broadcast system (254 lines)
+  - Axum WebSocket support with `futures` for stream handling
+  - RealtimeBroadcast with Arc<RwLock> connection tracking
+  - Event filtering at WebSocket layer (sensitive_only, high_value_only, source)
+  - Broadcast on paste upload in handlers.rs
+  - Tests: test_broadcast_basic, test_connection_tracking, test_filter_sensitive
 - **Phase 4 Modules**:
   - New `src/search_history.rs` module with SQLite-backed search tracking
   - SearchFilters now Serializable for saved searches
