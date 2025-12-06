@@ -417,8 +417,6 @@ nav .container {
     white-space: pre-wrap;
     word-break: break-word;
     background: var(--bg);
-    max-height: 600px;
-    overflow-y: auto;
 }
 
 .paste-patterns {
