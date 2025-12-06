@@ -18,10 +18,10 @@ pub type Result<T> = std::result::Result<T, DbError>;
 pub struct ScraperHealth {
     pub source: String,
     pub last_run: i64,
-    pub success_rate: i64,  // percentage 0-100
+    pub success_rate: i64, // percentage 0-100
     pub total_runs: i64,
     pub pastes_found: i64,
-    pub status: String,  // "healthy", "degraded", "failing", "stale"
+    pub status: String, // "healthy", "degraded", "failing", "stale"
 }
 
 /// Format a search query for FTS5
@@ -33,23 +33,18 @@ fn format_fts_query(query: &str) -> String {
         .filter(|w| !w.is_empty())
         .map(|word| {
             // Escape quotes in the word
-            let escaped = word.replace('"', "\"\"")
-                .replace('*', "")
-                .replace('(', "")
-                .replace(')', "");
+            let escaped = word
+                .replace('"', "\"\"")
+                .replace(['*', '(', ')'], "");
             // Add wildcard for prefix matching
-            if escaped.len() >= 2 {
-                format!("\"{}\"*", escaped)
-            } else {
-                format!("\"{}\"*", escaped)
-            }
+            format!("\"{}\"*", escaped)
         })
         .collect();
-    
+
     if words.is_empty() {
         return "*".to_string();
     }
-    
+
     // Join with OR for more permissive matching
     words.join(" OR ")
 }
@@ -316,38 +311,43 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
     }
 
     /// Get pastes filtered by source and/or sensitive flag
-    pub fn get_filtered_pastes(&self, source: Option<&str>, sensitive: Option<bool>, limit: usize, offset: usize) -> Result<Vec<Paste>> {
+    pub fn get_filtered_pastes(
+        &self,
+        source: Option<&str>,
+        sensitive: Option<bool>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Paste>> {
         let sql = match (source, sensitive) {
-            (Some(_), Some(s)) => format!(
+            (Some(_), Some(_)) => 
                 "SELECT id, source, source_id, title, author, content, content_hash, url, 
                  syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
                  FROM pastes WHERE source = ?1 AND is_sensitive = ?2 ORDER BY created_at DESC LIMIT ?3 OFFSET ?4"
-            ),
-            (Some(_), None) => format!(
+            .to_string(),
+            (Some(_), None) => 
                 "SELECT id, source, source_id, title, author, content, content_hash, url, 
                  syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
                  FROM pastes WHERE source = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3"
-            ),
-            (None, Some(_)) => format!(
+            .to_string(),
+            (None, Some(_)) => 
                 "SELECT id, source, source_id, title, author, content, content_hash, url, 
                  syntax, matched_patterns, is_sensitive, created_at, expires_at, view_count 
                  FROM pastes WHERE is_sensitive = ?1 ORDER BY created_at DESC LIMIT ?2 OFFSET ?3"
-            ),
+            .to_string(),
             (None, None) => return self.get_recent_pastes_offset(limit, offset),
         };
 
         let mut stmt = self.conn.prepare(&sql)?;
-        
+
         let pastes = match (source, sensitive) {
             (Some(src), Some(sens)) => {
                 let sens_int = if sens { 1 } else { 0 };
                 stmt.query_map(params![src, sens_int, limit, offset], Self::row_to_paste)?
                     .collect::<SqlResult<Vec<_>>>()?
             }
-            (Some(src), None) => {
-                stmt.query_map(params![src, limit, offset], Self::row_to_paste)?
-                    .collect::<SqlResult<Vec<_>>>()?
-            }
+            (Some(src), None) => stmt
+                .query_map(params![src, limit, offset], Self::row_to_paste)?
+                .collect::<SqlResult<Vec<_>>>()?,
             (None, Some(sens)) => {
                 let sens_int = if sens { 1 } else { 0 };
                 stmt.query_map(params![sens_int, limit, offset], Self::row_to_paste)?
@@ -400,12 +400,12 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         let raw_query = filters.query.as_deref().unwrap_or("").trim();
         let limit = filters.limit.unwrap_or(25).min(100);
         let offset = filters.offset.unwrap_or(0);
-        
+
         // If no query, return recent pastes instead
         if raw_query.is_empty() {
             return self.get_recent_pastes_offset(limit, offset);
         }
-        
+
         // Format query for FTS5 - escape special characters and add wildcards
         // FTS5 treats these as special: AND OR NOT ( ) " * ^
         let fts_query = format_fts_query(raw_query);
@@ -516,13 +516,17 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 
     /// Delete a paste by ID (admin only)
     pub fn delete_paste(&mut self, id: &str) -> Result<bool> {
-        let changes = self.conn.execute("DELETE FROM pastes WHERE id = ?", params![id])?;
+        let changes = self
+            .conn
+            .execute("DELETE FROM pastes WHERE id = ?", params![id])?;
         Ok(changes > 0)
     }
 
     /// Delete a comment by ID (admin only)
     pub fn delete_comment(&mut self, id: &str) -> Result<bool> {
-        let changes = self.conn.execute("DELETE FROM comments WHERE id = ?", params![id])?;
+        let changes = self
+            .conn
+            .execute("DELETE FROM comments WHERE id = ?", params![id])?;
         Ok(changes > 0)
     }
 
@@ -541,28 +545,42 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 
     /// Get database stats (admin)
     pub fn get_db_stats(&self) -> Result<(i64, i64, i64)> {
-        let paste_count: i64 = self.conn.query_row("SELECT COUNT(*) FROM pastes", [], |r| r.get(0))?;
-        let comment_count: i64 = self.conn.query_row("SELECT COUNT(*) FROM comments", [], |r| r.get(0))?;
-        let sensitive_count: i64 = self.conn.query_row("SELECT COUNT(*) FROM pastes WHERE is_sensitive = 1", [], |r| r.get(0))?;
+        let paste_count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM pastes", [], |r| r.get(0))?;
+        let comment_count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM comments", [], |r| r.get(0))?;
+        let sensitive_count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM pastes WHERE is_sensitive = 1",
+            [],
+            |r| r.get(0),
+        )?;
         Ok((paste_count, comment_count, sensitive_count))
     }
 
     /// Purge all pastes from a source (admin)
     pub fn purge_source(&mut self, source: &str) -> Result<usize> {
-        let changes = self.conn.execute("DELETE FROM pastes WHERE source = ?", params![source])?;
+        let changes = self
+            .conn
+            .execute("DELETE FROM pastes WHERE source = ?", params![source])?;
         Ok(changes)
     }
 
     /// Get comment count for a paste
     pub fn get_comment_count(&self, paste_id: &str) -> Result<i64> {
-        let mut stmt = self.conn.prepare("SELECT COUNT(*) FROM comments WHERE paste_id = ?")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT COUNT(*) FROM comments WHERE paste_id = ?")?;
         let count = stmt.query_row(params![paste_id], |row| row.get(0))?;
         Ok(count)
     }
 
     /// Check if content hash exists (for deduplication)
     pub fn hash_exists(&self, hash: &str) -> Result<bool> {
-        let mut stmt = self.conn.prepare("SELECT 1 FROM pastes WHERE content_hash = ? LIMIT 1")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT 1 FROM pastes WHERE content_hash = ? LIMIT 1")?;
         let exists = stmt.exists(params![hash])?;
         Ok(exists)
     }
@@ -570,7 +588,12 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
     // === ANALYTICS METHODS ===
 
     /// Log a scraper run result
-    pub fn log_scraper_stat(&mut self, source: &str, success: bool, pastes_found: usize) -> Result<()> {
+    pub fn log_scraper_stat(
+        &mut self,
+        source: &str,
+        success: bool,
+        pastes_found: usize,
+    ) -> Result<()> {
         let now = chrono::Utc::now().timestamp();
         self.conn.execute(
             "INSERT INTO scraper_stats (source, success, failure, pastes_found, timestamp) VALUES (?, ?, ?, ?, ?)",
@@ -636,7 +659,9 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
             "SELECT action, details, timestamp FROM activity_logs ORDER BY timestamp DESC LIMIT ?",
         )?;
         let logs = stmt
-            .query_map(params![limit], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .query_map(params![limit], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })
             .map(|iter| iter.collect::<SqlResult<Vec<_>>>())??;
         Ok(logs)
     }
@@ -670,7 +695,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         // Get stats for last hour for recency, and last 24h for health metrics
         let hour_ago = chrono::Utc::now().timestamp() - 3600;
         let day_ago = chrono::Utc::now().timestamp() - (24 * 3600);
-        
+
         let mut stmt = self.conn.prepare(
             "SELECT 
                 source,
@@ -683,7 +708,7 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
              GROUP BY source
              ORDER BY source",
         )?;
-        
+
         let health = stmt
             .query_map(params![day_ago], |row| {
                 let source: String = row.get(0)?;
@@ -691,25 +716,25 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
                 let successes: i64 = row.get(2)?;
                 let failures: i64 = row.get(3)?;
                 let pastes_found: i64 = row.get(4)?;
-                
+
                 let total = successes + failures;
                 let success_rate = if total > 0 {
                     (successes as f64 / total as f64 * 100.0) as i64
                 } else {
                     0
                 };
-                
+
                 // Determine status based on metrics
                 let status = if last_run < hour_ago {
-                    "stale".to_string()  // No runs in last hour
+                    "stale".to_string() // No runs in last hour
                 } else if success_rate < 50 {
-                    "degraded".to_string()  // High failure rate
+                    "degraded".to_string() // High failure rate
                 } else if failures > 0 && successes == 0 {
-                    "failing".to_string()  // All recent runs failed
+                    "failing".to_string() // All recent runs failed
                 } else {
                     "healthy".to_string()
                 };
-                
+
                 Ok(ScraperHealth {
                     source,
                     last_run,
@@ -720,29 +745,30 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
                 })
             })?
             .collect::<SqlResult<Vec<_>>>()?;
-        
+
         Ok(health)
     }
 
     /// Helper function to convert a database row to a Paste struct
     fn row_to_paste(row: &Row) -> rusqlite::Result<Paste> {
         let matched_patterns_str: Option<String> = row.get(9)?;
-        let matched_patterns: Option<Vec<crate::models::PatternMatch>> = if let Some(s) = &matched_patterns_str {
-            if s.is_empty() {
-                None
+        let matched_patterns: Option<Vec<crate::models::PatternMatch>> =
+            if let Some(s) = &matched_patterns_str {
+                if s.is_empty() {
+                    None
+                } else {
+                    serde_json::from_str(s).ok()
+                }
             } else {
-                serde_json::from_str(s).ok()
-            }
-        } else {
-            None
-        };
+                None
+            };
 
         let is_sensitive: i32 = row.get(10)?;
-        
+
         // Compute high_value: true if any matched pattern has "critical" severity
-        let high_value = matched_patterns.as_ref().map_or(false, |patterns| {
-            patterns.iter().any(|p| p.severity == "critical")
-        });
+        let high_value = matched_patterns
+            .as_ref()
+            .is_some_and(|patterns| patterns.iter().any(|p| p.severity == "critical"));
 
         Ok(Paste {
             id: row.get(0)?,
@@ -794,16 +820,16 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
         if ids.is_empty() {
             return Ok(0);
         }
-        
+
         // Use a transaction for batch operations
         let tx = self.conn.transaction()?;
         let mut total_deleted = 0;
-        
+
         for id in ids {
             let changes = tx.execute("DELETE FROM pastes WHERE id = ?", params![id])?;
             total_deleted += changes;
         }
-        
+
         tx.commit()?;
         Ok(total_deleted)
     }
@@ -811,10 +837,9 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
     /// Delete pastes older than N days (admin only)
     pub fn delete_pastes_older_than(&mut self, days: i64) -> Result<usize> {
         let cutoff = chrono::Utc::now().timestamp() - (days * 24 * 60 * 60);
-        let count = self.conn.execute(
-            "DELETE FROM pastes WHERE created_at < ?",
-            params![cutoff],
-        )?;
+        let count = self
+            .conn
+            .execute("DELETE FROM pastes WHERE created_at < ?", params![cutoff])?;
         Ok(count)
     }
 
@@ -843,9 +868,9 @@ INSERT OR REPLACE INTO metadata (key, value) VALUES ('created_at', unixepoch());
 
     /// Check if a content hash already exists (for deduplication)
     pub fn check_hash_exists(&self, hash: &str) -> Result<bool> {
-        let mut stmt = self.conn.prepare(
-            "SELECT 1 FROM pastes WHERE content_hash = ? LIMIT 1",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT 1 FROM pastes WHERE content_hash = ? LIMIT 1")?;
         let exists = stmt.exists(params![hash])?;
         Ok(exists)
     }

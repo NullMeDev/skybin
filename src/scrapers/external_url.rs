@@ -92,7 +92,7 @@ impl Scraper for ExternalUrlScraper {
             // Fetch the content
             match client
                 .get(&url)
-                .header("User-Agent", "PasteVault/1.0 (security research)")
+                .header("User-Agent", "SkyBin/2.1.0 (security research)")
                 .send()
                 .await
             {

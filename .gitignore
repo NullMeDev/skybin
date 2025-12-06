@@ -24,5 +24,5 @@
 Thumbs.db
 
 # Runtime
-pastevault.db*
+skybin.db*
 telegram-scraper-rs/target/

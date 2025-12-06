@@ -1,6 +1,6 @@
+use super::traits::{Scraper, ScraperResult};
 use crate::models::DiscoveredPaste;
 use async_trait::async_trait;
-use super::traits::{Scraper, ScraperResult};
 
 pub struct TermbinScraper;
 

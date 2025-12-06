@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 OUTPUT_DIR = os.getenv('SECRETS_OUTPUT_DIR', '/opt/skybin/extracted_secrets')
 
 # Database path for deduplication
-DB_PATH = os.getenv('SKYBIN_DB_PATH', '/opt/skybin/pastevault.db')
+DB_PATH = os.getenv('SKYBIN_DB_PATH', '/opt/skybin/skybin.db')
 
 # Server secrets to exclude (loaded from environment or file)
 EXCLUDED_SECRETS_FILE = os.getenv('EXCLUDED_SECRETS_FILE', '/opt/skybin/.excluded_secrets')

@@ -1,5 +1,5 @@
 [package]
-name = "paste-vault"
+name = "skybin"
 version = "2.1.0"
 edition = "2021"
 authors = ["NullMe <dev@nullme.lol>"]
@@ -10,7 +10,7 @@ license = "MIT"
 path = "src/lib.rs"
 
 [[bin]]
-name = "paste-vault"
+name = "skybin"
 path = "src/main.rs"
 
 [dependencies]

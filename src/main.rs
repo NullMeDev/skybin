@@ -1,11 +1,11 @@
-use paste_vault::admin::AdminAuth;
-use paste_vault::config::Config;
-use paste_vault::db::Database;
-use paste_vault::patterns::PatternDetector;
-use paste_vault::rate_limiter::{ApiRateLimiters, SourceRateLimiter};
-use paste_vault::scheduler::Scheduler;
-use paste_vault::scrapers::traits::Scraper;
-use paste_vault::scrapers::{
+use skybin::admin::AdminAuth;
+use skybin::config::Config;
+use skybin::db::Database;
+use skybin::patterns::PatternDetector;
+use skybin::rate_limiter::{ApiRateLimiters, SourceRateLimiter};
+use skybin::scheduler::Scheduler;
+use skybin::scrapers::traits::Scraper;
+use skybin::scrapers::{
     BpastScraper, BpasteScraper, CodepadScraper, ControlcScraper, DPasteScraper, DefuseScraper,
     DpasteOrgScraper, ExternalUrlScraper, GhostbinScraper, GitHubCodeScraper, GitHubGistsScraper,
     HastebinScraper, IdeoneScraper, IxioScraper, JustPasteScraper, Paste2Scraper, PasteEeScraper,
@@ -13,7 +13,7 @@ use paste_vault::scrapers::{
     PsbdmpScraper, QuickpasteScraper, RentryScraper, SlexyScraper, SprungeScraper, TermbinScraper,
     TorPastesScraper, UbuntuPastebinScraper,
 };
-use paste_vault::web::{create_router, AppState};
+use skybin::web::{create_router, AppState};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -63,29 +63,32 @@ async fn main() -> anyhow::Result<()> {
             let base_interval = scraper_config.scraping.interval_seconds;
             let max_backoff = 3600u64; // Max 1 hour backoff
             let mut consecutive_failures = 0u32;
-            
+
             loop {
                 let result = scraper.fetch_recent(&client).await;
-                
+
                 // Log scraper health stats
                 let (success, pastes_found) = match &result {
                     Ok(pastes) => (true, pastes.len()),
                     Err(_) => (false, 0),
                 };
-                
+
                 if let Ok(mut stats_db) = Database::open(&scraper_config.storage.db_path) {
                     let _ = stats_db.log_scraper_stat(name, success, pastes_found);
                 }
-                
+
                 // Calculate next sleep interval with exponential backoff on failure
                 let sleep_interval = match result {
                     Ok(discovered_pastes) => {
                         // Reset backoff on success
                         if consecutive_failures > 0 {
-                            println!("✓ [{}] Recovered after {} failures", name, consecutive_failures);
+                            println!(
+                                "✓ [{}] Recovered after {} failures",
+                                name, consecutive_failures
+                            );
                         }
                         consecutive_failures = 0;
-                        
+
                         if !discovered_pastes.is_empty() {
                             println!("✓ [{}] Fetched {} pastes", name, discovered_pastes.len());
                         }
@@ -104,23 +107,32 @@ async fn main() -> anyhow::Result<()> {
                     }
                     Err(e) => {
                         consecutive_failures += 1;
-                        
+
                         // Exponential backoff: base * 2^failures, capped at max_backoff
-                        let backoff = (base_interval * 2u64.saturating_pow(consecutive_failures.min(10)))
-                            .min(max_backoff);
-                        
+                        let backoff = (base_interval
+                            * 2u64.saturating_pow(consecutive_failures.min(10)))
+                        .min(max_backoff);
+
                         if consecutive_failures == 1 {
-                            tracing::warn!("[{}] Scraper error: {} (retry in {}s)", name, e, backoff);
+                            tracing::warn!(
+                                "[{}] Scraper error: {} (retry in {}s)",
+                                name,
+                                e,
+                                backoff
+                            );
                         } else {
                             tracing::warn!(
                                 "[{}] Scraper error (failure #{}, backing off {}s): {}",
-                                name, consecutive_failures, backoff, e
+                                name,
+                                consecutive_failures,
+                                backoff,
+                                e
                             );
                         }
                         backoff
                     }
                 };
-                
+
                 tokio::time::sleep(Duration::from_secs(sleep_interval)).await;
             }
         });
@@ -264,7 +276,7 @@ async fn main() -> anyhow::Result<()> {
     let addr = format!("{}:{}", config.server.host, config.server.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     println!(
-        "\n==> PasteVault v{} initialized successfully!",
+        "\n==> SkyBin v{} initialized successfully!",
         env!("CARGO_PKG_VERSION")
     );
     println!("    Server listening on http://{}", addr);

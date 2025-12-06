@@ -2,7 +2,7 @@ use regex::Regex;
 
 pub fn generate_title(content: &str) -> String {
     let content = content.trim();
-    
+
     if content.is_empty() {
         return "Empty Paste".to_string();
     }
@@ -34,8 +34,14 @@ fn detect_code_type(content: &str) -> Option<String> {
         (r#"^\s*fn\s+main\s*\("#, "Rust Program"),
         (r#"^\s*public\s+class\s+\w+"#, "Java Class"),
         (r#"^\s*class\s+\w+.*:"#, "Python Class"),
-        (r#"^\s*import\s+(React|useState|useEffect)"#, "React Component"),
-        (r#"^\s*import\s+\{.*\}\s+from\s+['"]vue['"]"#, "Vue Component"),
+        (
+            r#"^\s*import\s+(React|useState|useEffect)"#,
+            "React Component",
+        ),
+        (
+            r#"^\s*import\s+\{.*\}\s+from\s+['"]vue['"]"#,
+            "Vue Component",
+        ),
         (r#"^\s*<template>"#, "Vue Template"),
         (r#"^\s*<!DOCTYPE\s+html>"#, "HTML Document"),
         (r#"^\s*<html"#, "HTML Document"),
@@ -48,7 +54,10 @@ fn detect_code_type(content: &str) -> Option<String> {
         (r#"^\s*UPDATE\s+\w+\s+SET"#, "SQL Update"),
         (r#"^\s*const\s+\w+\s*=\s*require\("#, "Node.js Module"),
         (r#"^\s*import\s+\w+\s+from\s+"#, "ES6 Module"),
-        (r#"^\s*export\s+(default\s+)?(function|class|const)"#, "ES6 Export"),
+        (
+            r#"^\s*export\s+(default\s+)?(function|class|const)"#,
+            "ES6 Export",
+        ),
         (r#"^\s*\[Unit\]"#, "Systemd Unit File"),
         (r#"^\s*\[Service\]"#, "Systemd Service"),
         (r#"^\s*FROM\s+\w+"#, "Dockerfile"),
@@ -71,7 +80,7 @@ fn detect_code_type(content: &str) -> Option<String> {
 
 fn detect_data_type(content: &str) -> Option<String> {
     let content_lower = content.to_lowercase();
-    
+
     // Streaming service logins (check first as most specific)
     let streaming_patterns = [
         (&["disney", "disneyplus", "disney+"][..], "Disney+ Login"),
@@ -84,9 +93,15 @@ fn detect_data_type(content: &str) -> Option<String> {
         (&["funimation"][..], "Funimation Login"),
         (&["spotify"][..], "Spotify Login"),
         (&["apple music", "applemusic"][..], "Apple Music Login"),
-        (&["amazon prime", "primevideo", "prime video"][..], "Amazon Prime Login"),
+        (
+            &["amazon prime", "primevideo", "prime video"][..],
+            "Amazon Prime Login",
+        ),
         (&["twitch"][..], "Twitch Login"),
-        (&["youtube premium", "ytpremium"][..], "YouTube Premium Login"),
+        (
+            &["youtube premium", "ytpremium"][..],
+            "YouTube Premium Login",
+        ),
         (&["dazn"][..], "DAZN Login"),
         (&["espn", "espn+"][..], "ESPN+ Login"),
         (&["showtime"][..], "Showtime Login"),
@@ -109,9 +124,11 @@ fn detect_data_type(content: &str) -> Option<String> {
     ];
 
     // Check if content has email:password pattern AND a service keyword
-    let has_login_pattern = content_lower.contains(':') && 
-        (content_lower.contains('@') || content_lower.contains("pass") || content_lower.contains("user"));
-    
+    let has_login_pattern = content_lower.contains(':')
+        && (content_lower.contains('@')
+            || content_lower.contains("pass")
+            || content_lower.contains("user"));
+
     if has_login_pattern {
         for (keywords, title) in streaming_patterns {
             for keyword in keywords {
@@ -125,9 +142,14 @@ fn detect_data_type(content: &str) -> Option<String> {
     // General patterns
     let patterns = [
         // Combo lists
-        (r"(?i)([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\s*[:|]\s*\S+", "Email:Password Combo List"),
-        (r"(?i)(user|username)\s*[:|]\s*\S+.*(pass|password)\s*[:|]\s*\S+", "Username:Password List"),
-        
+        (
+            r"(?i)([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\s*[:|]\s*\S+",
+            "Email:Password Combo List",
+        ),
+        (
+            r"(?i)(user|username)\s*[:|]\s*\S+.*(pass|password)\s*[:|]\s*\S+",
+            "Username:Password List",
+        ),
         // API and tokens
         (r"(?i)api[_-]?key\s*[:=]", "API Key Leak"),
         (r"(?i)secret[_-]?key\s*[:=]", "Secret Key Data"),
@@ -137,69 +159,84 @@ fn detect_data_type(content: &str) -> Option<String> {
         (r"(?i)discord.*token|token.*discord", "Discord Token"),
         (r"[MN][A-Za-z\d]{23,}\.[\w-]{6}\.[\w-]{27}", "Discord Token"),
         (r"(?i)telegram.*bot|bot.*token", "Telegram Bot Token"),
-        
         // Keys and certs
-        (r"-----BEGIN\s+(RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY-----", "Private Key"),
+        (
+            r"-----BEGIN\s+(RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY-----",
+            "Private Key",
+        ),
         (r"-----BEGIN\s+CERTIFICATE-----", "SSL Certificate"),
-        
         // Database
-        (r"(?i)mysql://|postgres://|mongodb://|redis://", "Database Connection String"),
-        
+        (
+            r"(?i)mysql://|postgres://|mongodb://|redis://",
+            "Database Connection String",
+        ),
         // Financial
         (r"\b4[0-9]{12}(?:[0-9]{3})?\b", "Credit Card Numbers"),
         (r"(?i)cvv|credit.?card|debit.?card", "Payment Card Data"),
         (r"(?i)paypal.*login|paypal.*pass", "PayPal Login"),
         (r"(?i)bank.*login|bank.*pass", "Banking Credentials"),
-        
         // Social media
         (r"(?i)instagram.*pass|insta.*login", "Instagram Login"),
         (r"(?i)facebook.*pass|fb.*login", "Facebook Login"),
         (r"(?i)twitter.*pass|twitter.*login", "Twitter Login"),
         (r"(?i)tiktok.*pass|tiktok.*login", "TikTok Login"),
         (r"(?i)snapchat.*pass|snap.*login", "Snapchat Login"),
-        
         // Email providers
         (r"(?i)gmail.*pass|google.*login", "Gmail/Google Login"),
-        (r"(?i)outlook.*pass|hotmail.*pass|microsoft.*login", "Microsoft/Outlook Login"),
+        (
+            r"(?i)outlook.*pass|hotmail.*pass|microsoft.*login",
+            "Microsoft/Outlook Login",
+        ),
         (r"(?i)yahoo.*pass|yahoo.*login", "Yahoo Login"),
         (r"(?i)protonmail|proton.*mail", "ProtonMail Login"),
-        
         // Cloud services
         (r"(?i)aws.*key|amazon.*secret", "AWS Credentials"),
         (r"(?i)azure.*key|azure.*secret", "Azure Credentials"),
         (r"(?i)gcp.*key|google.*cloud", "Google Cloud Credentials"),
         (r"(?i)digitalocean.*token", "DigitalOcean Token"),
         (r"(?i)heroku.*api", "Heroku API Key"),
-        
         // Hosting/domains
         (r"(?i)cpanel.*pass|cpanel.*login", "cPanel Login"),
         (r"(?i)plesk.*pass|plesk.*login", "Plesk Login"),
-        (r"(?i)godaddy.*login|namecheap.*login", "Domain Registrar Login"),
-        (r"(?i)cloudflare.*key|cloudflare.*token", "Cloudflare Credentials"),
-        
+        (
+            r"(?i)godaddy.*login|namecheap.*login",
+            "Domain Registrar Login",
+        ),
+        (
+            r"(?i)cloudflare.*key|cloudflare.*token",
+            "Cloudflare Credentials",
+        ),
         // General auth
         (r"(?i)bearer\s+[a-zA-Z0-9._-]+", "Bearer Token"),
         (r"(?i)authorization:\s*", "Authorization Header"),
         (r"(?i)oauth.*token|access_token", "OAuth Token"),
         (r"(?i)jwt.*token|eyJ[A-Za-z0-9_-]+\.", "JWT Token"),
-        
         // IP/Network
-        (r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b.*\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "IP Address List"),
+        (
+            r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b.*\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
+            "IP Address List",
+        ),
         (r"(?i)ssh.*pass|ssh.*key|id_rsa", "SSH Credentials"),
         (r"(?i)ftp.*pass|ftp.*login", "FTP Credentials"),
         (r"(?i)rdp.*pass|remote.*desktop", "RDP Credentials"),
-        
         // Logs
-        (r"(?i)(error|exception|traceback|stack\s*trace)", "Error Log"),
+        (
+            r"(?i)(error|exception|traceback|stack\s*trace)",
+            "Error Log",
+        ),
         (r"(?i)access[_-]?log|error[_-]?log", "Server Log"),
         (r"\[\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2}", "Apache/Nginx Log"),
-        
         // Config files
-        (r"(?i)config.*password|password.*config", "Config File with Passwords"),
+        (
+            r"(?i)config.*password|password.*config",
+            "Config File with Passwords",
+        ),
         (r"(?i)\.env|environment.*variable", "Environment Variables"),
-        
         // General email lists
-        (r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}.*){5,}", "Email List"),
+        (
+            r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}.*){5,}",
+            "Email List",
+        ),
     ];
 
     for (pattern, name) in patterns {
@@ -215,7 +252,7 @@ fn detect_data_type(content: &str) -> Option<String> {
 fn extract_first_meaningful_line(content: &str) -> Option<String> {
     for line in content.lines().take(10) {
         let line = line.trim();
-        
+
         if line.is_empty() {
             continue;
         }
@@ -226,18 +263,12 @@ fn extract_first_meaningful_line(content: &str) -> Option<String> {
             }
         }
         if line.starts_with("//") || line.starts_with("/*") || line.starts_with("*") {
-            let cleaned = line
-                .trim_start_matches('/')
-                .trim_start_matches('*')
-                .trim();
+            let cleaned = line.trim_start_matches('/').trim_start_matches('*').trim();
             if cleaned.len() >= 10 && cleaned.len() <= 60 && !cleaned.contains("TODO") {
                 return Some(cleaned.to_string());
             }
         }
-        if let Some(caps) = Regex::new(r#"^(?:def|function|fn|class|struct|interface|type)\s+(\w+)"#)
-            .ok()
-            .and_then(|re| re.captures(line))
-        {
+        if let Some(caps) = DEF_REGEX.captures(line) {
             if let Some(name) = caps.get(1) {
                 return Some(format!("{} Definition", name.as_str()));
             }
@@ -246,9 +277,13 @@ fn extract_first_meaningful_line(content: &str) -> Option<String> {
     None
 }
 
+use once_cell::sync::Lazy;
+static DEF_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"^(?:def|function|fn|class|struct|interface|type)\s+(\w+)"#).unwrap());
+
 fn generate_summary(content: &str) -> String {
     let first_line = content.lines().next().unwrap_or("").trim();
-    
+
     if first_line.is_empty() {
         return "Text Paste".to_string();
     }
@@ -257,9 +292,9 @@ fn generate_summary(content: &str) -> String {
         .chars()
         .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '-' || *c == '_')
         .collect();
-    
+
     let cleaned = cleaned.trim();
-    
+
     if cleaned.len() < 3 {
         return "Code Snippet".to_string();
     }
@@ -283,7 +318,10 @@ mod tests {
 
     #[test]
     fn test_python_detection() {
-        assert_eq!(generate_title("#!/usr/bin/env python\nprint('hi')"), "Python Script");
+        assert_eq!(
+            generate_title("#!/usr/bin/env python\nprint('hi')"),
+            "Python Script"
+        );
     }
 
     #[test]
@@ -298,7 +336,10 @@ mod tests {
 
     #[test]
     fn test_markdown_title() {
-        assert_eq!(generate_title("# My Document\n\nContent here"), "My Document");
+        assert_eq!(
+            generate_title("# My Document\n\nContent here"),
+            "My Document"
+        );
     }
 
     #[test]

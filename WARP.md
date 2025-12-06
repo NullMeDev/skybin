@@ -4,7 +4,7 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 ## Project Overview
 
-**SkyBin** (paste-vault) is a Rust-based paste aggregator that monitors public paste sites and Telegram channels for leaked credentials, API keys, and sensitive data. It scrapes 24+ paste sources, applies pattern detection, and stores results in SQLite with FTS5 full-text search.
+**SkyBin** is a Rust-based paste aggregator that monitors public paste sites and Telegram channels for leaked credentials, API keys, and sensitive data. It scrapes 24+ paste sources, applies pattern detection, and stores results in SQLite with FTS5 full-text search.
 
 Live instances: https://skybin.lol | https://bin.nullme.lol
 
@@ -16,7 +16,7 @@ cargo build                    # Debug build
 cargo build --release          # Release build (with LTO)
 
 # Run
-./target/release/paste-vault   # Requires config.toml in working directory
+./target/release/skybin        # Requires config.toml in working directory
 
 # Test
 cargo test --lib --verbose     # Unit tests only

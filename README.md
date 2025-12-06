@@ -75,7 +75,7 @@ POST /api/submit-url            - submit URL to scrape
 
 ```bash
 cargo build --release
-./target/release/paste-vault
+./target/release/skybin
 ```
 
 ## License

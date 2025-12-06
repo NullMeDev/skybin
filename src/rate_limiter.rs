@@ -198,7 +198,7 @@ impl ApiRateLimiter {
         };
 
         let timestamps = requests.entry(key.to_string()).or_insert_with(Vec::new);
-        
+
         // Remove expired entries
         timestamps.retain(|t| *t > cutoff);
 
@@ -213,7 +213,7 @@ impl ApiRateLimiter {
     /// Cleanup old entries to prevent memory growth
     pub fn cleanup(&self) {
         let cutoff = Instant::now() - self.window;
-        
+
         if let Ok(mut requests) = self.requests.lock() {
             requests.retain(|_, timestamps| {
                 timestamps.retain(|t| *t > cutoff);

@@ -91,7 +91,11 @@ impl CredentialValidator {
                 };
                 Some(ValidationResult {
                     credential_type: "github_token".to_string(),
-                    credential: format!("{}...{}", &credential[..8], &credential[credential.len()-4..]),
+                    credential: format!(
+                        "{}...{}",
+                        &credential[..8],
+                        &credential[credential.len() - 4..]
+                    ),
                     status,
                     details: Some(format!("HTTP {}", resp.status())),
                 })
@@ -114,7 +118,11 @@ impl CredentialValidator {
         // AWS keys require secret key to validate - just return format check
         Some(ValidationResult {
             credential_type: "aws_access_key".to_string(),
-            credential: format!("{}...{}", &credential[..8], &credential[credential.len()-4..]),
+            credential: format!(
+                "{}...{}",
+                &credential[..8],
+                &credential[credential.len() - 4..]
+            ),
             status: ValidationStatus::Unknown,
             details: Some("AWS keys require secret key for full validation".to_string()),
         })
@@ -147,7 +155,11 @@ impl CredentialValidator {
                 };
                 Some(ValidationResult {
                     credential_type: "stripe_key".to_string(),
-                    credential: format!("{}...{}", &credential[..12], &credential[credential.len()-4..]),
+                    credential: format!(
+                        "{}...{}",
+                        &credential[..12],
+                        &credential[credential.len() - 4..]
+                    ),
                     status,
                     details: Some(format!("HTTP {}", resp.status())),
                 })
@@ -183,7 +195,11 @@ impl CredentialValidator {
                 };
                 Some(ValidationResult {
                     credential_type: "openai_key".to_string(),
-                    credential: format!("{}...{}", &credential[..8], &credential[credential.len()-4..]),
+                    credential: format!(
+                        "{}...{}",
+                        &credential[..8],
+                        &credential[credential.len() - 4..]
+                    ),
                     status,
                     details: Some(format!("HTTP {}", resp.status())),
                 })
@@ -198,7 +214,8 @@ impl CredentialValidator {
     }
 
     async fn validate_discord_token(&self, credential: &str) -> Option<ValidationResult> {
-        let pattern = Regex::new(r"^[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}$").unwrap();
+        let pattern =
+            Regex::new(r"^[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}$").unwrap();
         if !pattern.is_match(credential) {
             return None;
         }
@@ -219,7 +236,11 @@ impl CredentialValidator {
                 };
                 Some(ValidationResult {
                     credential_type: "discord_token".to_string(),
-                    credential: format!("{}...{}", &credential[..8], &credential[credential.len()-4..]),
+                    credential: format!(
+                        "{}...{}",
+                        &credential[..8],
+                        &credential[credential.len() - 4..]
+                    ),
                     status,
                     details: Some(format!("HTTP {}", resp.status())),
                 })

@@ -72,6 +72,6 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: paste-vault-release
-          path: target/release/paste-vault
+name: skybin-release
+path: target/release/skybin
           retention-days: 5

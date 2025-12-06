@@ -45,7 +45,7 @@ impl Scraper for IxioScraper {
         // For now, check if site is available
         let response = client
             .get(&self.base_url)
-            .header("User-Agent", "PasteVault/1.0 (security research)")
+            .header("User-Agent", "SkyBin/2.1.0 (security research)")
             .send()
             .await?;
 

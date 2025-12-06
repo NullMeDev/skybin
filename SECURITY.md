@@ -6,7 +6,7 @@
 
 ## Executive Summary
 
-A comprehensive security audit was performed on the SkyBin (paste-vault) codebase, including the Rust backend, web frontend, and Python Telegram scraper. This document outlines the findings, implemented fixes, and remaining recommendations.
+A comprehensive security audit was performed on the SkyBin codebase, including the Rust backend, web frontend, and Python Telegram scraper. This document outlines the findings, implemented fixes, and remaining recommendations.
 
 ---
 

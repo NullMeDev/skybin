@@ -5,6 +5,7 @@ use async_trait::async_trait;
 /// Paste.ee scraper - scrapes from paste.ee web interface
 /// Note: Paste.ee doesn't have a public recent/archive page
 pub struct PasteEeScraper {
+    #[allow(dead_code)]
     base_url: String,
 }
 

@@ -61,8 +61,8 @@ pub struct ScrapingConfig {
 pub struct SourcesConfig {
     pub pastebin: bool,
     #[serde(default)]
-    pub github: bool,  // GitHub code search for exposed secrets
-    pub gists: bool,   // Legacy gists scraper (deprecated)
+    pub github: bool, // GitHub code search for exposed secrets
+    pub gists: bool, // Legacy gists scraper (deprecated)
     pub paste_ee: bool,
     pub rentry: bool,
     pub ghostbin: bool,

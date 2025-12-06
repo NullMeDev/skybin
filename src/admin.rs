@@ -1,7 +1,7 @@
-use sha2::{Sha256, Digest};
-use std::sync::RwLock;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::time::{Instant, Duration};
+use std::sync::RwLock;
+use std::time::{Duration, Instant};
 
 /// Session token TTL - 24 hours
 const SESSION_TTL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -81,13 +81,7 @@ impl AdminAuth {
 
     /// Extract token from Authorization header
     pub fn extract_token(auth_header: Option<&str>) -> Option<&str> {
-        auth_header.and_then(|h| {
-            if h.starts_with("Bearer ") {
-                Some(&h[7..])
-            } else {
-                None
-            }
-        })
+        auth_header.and_then(|h| h.strip_prefix("Bearer "))
     }
 }
 
@@ -98,14 +92,14 @@ mod tests {
     #[test]
     fn test_login_logout() {
         let auth = AdminAuth::new("testpassword123");
-        
+
         // Wrong password
         assert!(auth.login("wrongpassword").is_none());
-        
+
         // Correct password
         let token = auth.login("testpassword123").unwrap();
         assert!(auth.verify_token(&token));
-        
+
         // Logout
         auth.logout(&token);
         assert!(!auth.verify_token(&token));

@@ -1,4 +1,4 @@
--- PasteVault Database Schema
+-- SkyBin Database Schema
 -- Version: 001_initial
 
 -- Main pastes table

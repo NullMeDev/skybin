@@ -119,7 +119,7 @@ pub struct SourceStat {
 pub struct Comment {
     pub id: String,
     pub paste_id: String,
-    pub parent_id: Option<String>,  // For replies - None means top-level comment
+    pub parent_id: Option<String>, // For replies - None means top-level comment
     pub content: String,
     pub created_at: i64,
 }

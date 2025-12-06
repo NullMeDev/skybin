@@ -45,7 +45,7 @@ jobs:
           <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>SkyBin - Paste Vault Aggregator</title>
+            <title>SkyBin - Paste Aggregator</title>
             <style>
               * {
                 margin: 0;
@@ -188,7 +188,7 @@ jobs:
                 <h1>🔒 SkyBin</h1>
                 <ul>
                   <li><a href="#about">About</a></li>
-                  <li><a href="/docs/paste_vault">Docs</a></li>
+                  <li><a href="/docs/skybin">Docs</a></li>
                   <li><a href="https://github.com/NullMeDev/skybin">GitHub</a></li>
                 </ul>
               </nav>
@@ -215,7 +215,7 @@ jobs:
                 
                 <div class="cta-buttons">
                   <a href="https://github.com/NullMeDev/skybin" class="btn btn-primary">View on GitHub</a>
-                  <a href="/docs/paste_vault" class="btn btn-secondary">API Documentation</a>
+                  <a href="/docs/skybin" class="btn btn-secondary">API Documentation</a>
                 </div>
               </div>
             </main>

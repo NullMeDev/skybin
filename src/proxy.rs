@@ -10,14 +10,15 @@ pub enum ProxyType {
     Socks5,
 }
 
-impl ProxyType {
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for ProxyType {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "http" => Some(ProxyType::Http),
-            "https" => Some(ProxyType::Https),
-            "socks4" => Some(ProxyType::Socks4),
-            "socks5" => Some(ProxyType::Socks5),
-            _ => None,
+            "http" => Ok(ProxyType::Http),
+            "https" => Ok(ProxyType::Https),
+            "socks4" => Ok(ProxyType::Socks4),
+            "socks5" => Ok(ProxyType::Socks5),
+            _ => Err(()),
         }
     }
 }
@@ -39,7 +40,7 @@ impl Proxy {
             if parts.len() != 2 {
                 return None;
             }
-            (ProxyType::from_str(parts[0])?, parts[1])
+            (parts[0].parse().ok()?, parts[1])
         } else {
             (ProxyType::Http, proxy_str)
         };
@@ -48,7 +49,7 @@ impl Proxy {
         if parts.len() != 2 {
             return None;
         }
-        
+
         let port: u16 = parts[0].parse().ok()?;
         let host = parts[1].to_string();
 
@@ -183,14 +184,14 @@ mod tests {
             "http://proxy1:8080".to_string(),
             "http://proxy2:8080".to_string(),
         ]);
-        
+
         assert_eq!(rotator.count(), 2);
-        
+
         // Round-robin
         let p1 = rotator.next().unwrap();
         let p2 = rotator.next().unwrap();
         let p3 = rotator.next().unwrap();
-        
+
         assert_eq!(p1.host, "proxy1");
         assert_eq!(p2.host, "proxy2");
         assert_eq!(p3.host, "proxy1"); // Wraps around

@@ -1,4 +1,4 @@
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 /// Validate email:password combo format
 pub fn validate_combo(line: &str) -> bool {
@@ -8,23 +8,23 @@ pub fn validate_combo(line: &str) -> bool {
     }
     let email = parts[0].trim();
     let pass = parts[1].trim();
-    
+
     // Basic email validation
     if !email.contains('@') || !email.contains('.') {
         return false;
     }
-    
+
     // Check email has valid structure
     let email_parts: Vec<&str> = email.split('@').collect();
     if email_parts.len() != 2 || email_parts[0].is_empty() || email_parts[1].is_empty() {
         return false;
     }
-    
+
     // Domain must have at least one dot
     if !email_parts[1].contains('.') {
         return false;
     }
-    
+
     // Password must be non-empty and reasonable length
     !pass.is_empty() && pass.len() >= 4 && pass.len() <= 128
 }
@@ -48,7 +48,8 @@ pub fn is_combo_list(content: &str) -> bool {
 pub fn content_hash(content: &str) -> String {
     let mut hasher = Sha256::new();
     // Normalize: lowercase, remove extra whitespace
-    let normalized: String = content.to_lowercase()
+    let normalized: String = content
+        .to_lowercase()
         .split_whitespace()
         .collect::<Vec<&str>>()
         .join(" ");
@@ -62,24 +63,60 @@ pub fn detect_language(content: &str) -> &'static str {
     let patterns = [
         // Check most specific first
         (vec!["<?php", "<?="], "php"),
-        (vec!["#!/usr/bin/env python", "#!/usr/bin/python", "import ", "def ", "print("], "python"),
-        (vec!["#!/bin/bash", "#!/usr/bin/env bash", "#!/bin/sh"], "bash"),
+        (
+            vec![
+                "#!/usr/bin/env python",
+                "#!/usr/bin/python",
+                "import ",
+                "def ",
+                "print(",
+            ],
+            "python",
+        ),
+        (
+            vec!["#!/bin/bash", "#!/usr/bin/env bash", "#!/bin/sh"],
+            "bash",
+        ),
         (vec!["package main", "func main()", "import \"fmt\""], "go"),
         (vec!["fn main()", "let mut ", "impl ", "pub fn"], "rust"),
-        (vec!["public class ", "public static void main", "System.out."], "java"),
-        (vec!["using System;", "namespace ", "Console.Write"], "csharp"),
-        (vec!["#include <", "int main(", "printf(", "cout <<"], "c/cpp"),
-        (vec!["function ", "const ", "let ", "var ", "=>", "console.log"], "javascript"),
-        (vec!["import React", "useState", "useEffect", "jsx"], "react"),
+        (
+            vec!["public class ", "public static void main", "System.out."],
+            "java",
+        ),
+        (
+            vec!["using System;", "namespace ", "Console.Write"],
+            "csharp",
+        ),
+        (
+            vec!["#include <", "int main(", "printf(", "cout <<"],
+            "c/cpp",
+        ),
+        (
+            vec!["function ", "const ", "let ", "var ", "=>", "console.log"],
+            "javascript",
+        ),
+        (
+            vec!["import React", "useState", "useEffect", "jsx"],
+            "react",
+        ),
         (vec!["<template>", "v-if", "v-for", ":class"], "vue"),
         (vec!["<!DOCTYPE html", "<html", "<head>", "<body>"], "html"),
-        (vec!["SELECT ", "INSERT INTO", "CREATE TABLE", "UPDATE ", "DELETE FROM"], "sql"),
+        (
+            vec![
+                "SELECT ",
+                "INSERT INTO",
+                "CREATE TABLE",
+                "UPDATE ",
+                "DELETE FROM",
+            ],
+            "sql",
+        ),
         (vec!["{\"", "\":", "[{"], "json"),
         (vec!["---\n", "apiVersion:", "kind:"], "yaml"),
         (vec!["[Unit]", "[Service]", "[Install]"], "systemd"),
         (vec!["FROM ", "RUN ", "COPY ", "ENTRYPOINT"], "dockerfile"),
     ];
-    
+
     for (keywords, lang) in patterns {
         for kw in keywords {
             if c.contains(kw) {
@@ -87,7 +124,7 @@ pub fn detect_language(content: &str) -> &'static str {
             }
         }
     }
-    
+
     "plaintext"
 }
 
@@ -96,14 +133,14 @@ pub fn calculate_entropy(content: &str) -> f64 {
     if content.is_empty() {
         return 0.0;
     }
-    
+
     let mut freq = [0u64; 256];
     let len = content.len() as f64;
-    
+
     for byte in content.bytes() {
         freq[byte as usize] += 1;
     }
-    
+
     let mut entropy = 0.0;
     for &count in &freq {
         if count > 0 {
@@ -111,7 +148,7 @@ pub fn calculate_entropy(content: &str) -> f64 {
             entropy -= p * p.log2();
         }
     }
-    
+
     entropy
 }
 
@@ -134,33 +171,41 @@ pub fn has_high_entropy(content: &str) -> bool {
 /// Quality score for paste (0-100)
 pub fn quality_score(content: &str) -> u32 {
     let mut score = 50u32; // Base score
-    
+
     // Bonus for combo lists
     if is_combo_list(content) {
         score += 30;
     }
-    
+
     // Bonus for high entropy
     if has_high_entropy(content) {
         score += 20;
     }
-    
+
     // Bonus for length (more content = potentially more interesting)
     let lines = content.lines().count();
-    if lines > 10 { score += 5; }
-    if lines > 50 { score += 5; }
-    if lines > 100 { score += 5; }
-    
+    if lines > 10 {
+        score += 5;
+    }
+    if lines > 50 {
+        score += 5;
+    }
+    if lines > 100 {
+        score += 5;
+    }
+
     // Penalty for very short content
-    if lines < 5 { score = score.saturating_sub(20); }
-    
+    if lines < 5 {
+        score = score.saturating_sub(20);
+    }
+
     score.min(100)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_validate_combo() {
         assert!(validate_combo("test@example.com:password123"));
@@ -169,14 +214,17 @@ mod tests {
         assert!(!validate_combo("test@example.com:"));
         assert!(!validate_combo("test@:password"));
     }
-    
+
     #[test]
     fn test_detect_language() {
         assert_eq!(detect_language("<?php echo 'hello';"), "php");
         assert_eq!(detect_language("def main():\n    print('hi')"), "python");
-        assert_eq!(detect_language("#include <stdio.h>\nint main() {}"), "c/cpp");
+        assert_eq!(
+            detect_language("#include <stdio.h>\nint main() {}"),
+            "c/cpp"
+        );
     }
-    
+
     #[test]
     fn test_entropy() {
         let low = calculate_entropy("aaaaaaaaaa");

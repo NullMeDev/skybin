@@ -148,10 +148,12 @@ impl Scraper for GitHubGistsScraper {
                 }
 
                 // Generate credential summary and prepend to content
-                let fallback_title = gist.description
+                let fallback_title = gist
+                    .description
                     .clone()
                     .unwrap_or_else(|| format!("Gist: {}", filename));
-                let (summary_title, summarized_content) = prepend_summary(&content, &fallback_title);
+                let (summary_title, summarized_content) =
+                    prepend_summary(&content, &fallback_title);
 
                 let paste = DiscoveredPaste::new("gists", &gist.id, summarized_content)
                     .with_title(summary_title)
@@ -164,7 +166,7 @@ impl Scraper for GitHubGistsScraper {
                     );
 
                 pastes.push(paste);
-                
+
                 // Small delay to be nice to GitHub API
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }

@@ -4,7 +4,7 @@
 /// 2. Scheduler properly processes discovered pastes
 /// 3. Anonymization is applied at storage time
 /// 4. No PII leaks through the system
-use paste_vault::{
+use skybin::{
     anonymization::{anonymize_discovered_paste, verify_anonymity, AnonymizationConfig},
     models::DiscoveredPaste,
     scrapers::{DPasteScraper, GitHubGistsScraper, PasteEeScraper, PastebinScraper, Scraper},

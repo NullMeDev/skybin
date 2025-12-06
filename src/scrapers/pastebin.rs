@@ -6,6 +6,7 @@ use async_trait::async_trait;
 /// Pastebin scraper using archive page and scraping API
 pub struct PastebinScraper {
     archive_url: String,
+    #[allow(dead_code)]
     api_key: Option<String>,
 }
 
@@ -20,12 +21,19 @@ impl PastebinScraper {
     pub fn with_api_key(api_key: String) -> Self {
         PastebinScraper {
             archive_url: "https://pastebin.com/archive".to_string(),
-            api_key: if api_key.is_empty() { None } else { Some(api_key) },
+            api_key: if api_key.is_empty() {
+                None
+            } else {
+                Some(api_key)
+            },
         }
     }
 
     pub fn with_url(url: String) -> Self {
-        PastebinScraper { archive_url: url, api_key: None }
+        PastebinScraper {
+            archive_url: url,
+            api_key: None,
+        }
     }
 }
 

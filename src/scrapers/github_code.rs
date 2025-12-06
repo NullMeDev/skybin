@@ -56,6 +56,7 @@ const SECRET_QUERIES: &[&str] = &[
     r#"TELEGRAM_TOKEN extension:env"#,
 ];
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct CodeSearchResponse {
     total_count: i64,
@@ -63,6 +64,7 @@ struct CodeSearchResponse {
     items: Vec<CodeSearchItem>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct CodeSearchItem {
     name: String,
@@ -75,6 +77,7 @@ struct CodeSearchItem {
     text_matches: Vec<TextMatch>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct Repository {
     id: i64,
@@ -84,6 +87,7 @@ struct Repository {
     private: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TextMatch {
     fragment: String,
@@ -91,6 +95,7 @@ struct TextMatch {
     matches: Vec<Match>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct Match {
     text: String,
@@ -169,13 +174,16 @@ impl GitHubCodeScraper {
 
         if content.contains("AKIA") || lower.contains("aws_secret") {
             "AWS Credentials"
-        } else if content.contains("sk-proj-") || content.contains("sk-") && lower.contains("openai") {
+        } else if content.contains("sk-proj-")
+            || content.contains("sk-") && lower.contains("openai")
+        {
             "OpenAI API Key"
         } else if content.contains("ghp_") || content.contains("github_pat_") {
             "GitHub Token"
         } else if content.contains("sk_live_") {
             "Stripe Live Key"
-        } else if lower.contains("mongodb") || lower.contains("postgres") || lower.contains("mysql") {
+        } else if lower.contains("mongodb") || lower.contains("postgres") || lower.contains("mysql")
+        {
             "Database Credentials"
         } else if content.contains("BEGIN") && content.contains("PRIVATE KEY") {
             "Private Key"
@@ -282,7 +290,9 @@ impl Scraper for GitHubCodeScraper {
             // Generate credential summary and use as title
             let fallback_title = format!(
                 "[GH] {} in {}/{}",
-                Self::extract_secret_type(&content), item.repository.full_name, item.name
+                Self::extract_secret_type(&content),
+                item.repository.full_name,
+                item.name
             );
             let (summary_title, summarized_content) = prepend_summary(&content, &fallback_title);
 
@@ -292,13 +302,7 @@ impl Scraper for GitHubCodeScraper {
             let paste = DiscoveredPaste::new("github", &source_id, summarized_content)
                 .with_title(summary_title)
                 .with_url(item.html_url.clone())
-                .with_syntax(
-                    item.name
-                        .rsplit('.')
-                        .next()
-                        .unwrap_or("text")
-                        .to_string(),
-                );
+                .with_syntax(item.name.rsplit('.').next().unwrap_or("text").to_string());
 
             pastes.push(paste);
 

@@ -9,6 +9,7 @@ pub struct PsbdmpScraper {
     keywords: Vec<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct PsbdmpResult {
     id: String,
@@ -55,15 +56,18 @@ impl Scraper for PsbdmpScraper {
 
     async fn fetch_recent(&self, client: &reqwest::Client) -> ScraperResult<Vec<DiscoveredPaste>> {
         let mut pastes = Vec::new();
-        
+
         // Rotate through keywords to get diverse results
         let keyword = &self.keywords[rand::random::<usize>() % self.keywords.len()];
-        
+
         let url = format!("https://psbdmp.ws/api/search/{}", keyword);
-        
+
         let response = client
             .get(&url)
-            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            )
             .send()
             .await?;
 
@@ -86,7 +90,7 @@ impl Scraper for PsbdmpScraper {
         for result in results.into_iter().take(20) {
             // psbdmp returns pastebin IDs - fetch full content
             let paste_url = format!("https://pastebin.com/raw/{}", result.id);
-            
+
             match client
                 .get(&paste_url)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
@@ -101,19 +105,19 @@ impl Scraper for PsbdmpScraper {
                             } else {
                                 format!("Leak: {}", keyword)
                             };
-                            
+
                             let paste = DiscoveredPaste::new("psbdmp", &result.id, content)
                                 .with_title(title)
                                 .with_url(format!("https://pastebin.com/{}", result.id))
                                 .with_syntax("plaintext".to_string());
-                            
+
                             pastes.push(paste);
                         }
                     }
                 }
                 _ => continue,
             }
-            
+
             // Small delay to avoid rate limits
             tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
         }

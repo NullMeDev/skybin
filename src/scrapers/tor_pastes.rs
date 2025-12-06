@@ -24,7 +24,8 @@ impl TorPastesScraper {
             onion_sites: vec![
                 OnionSite {
                     name: "stronghold",
-                    base_url: "http://strongerw2ise74v3duebgsvug4mehyhlpa7f6kfwnas7zofs3ber7yid.onion",
+                    base_url:
+                        "http://strongerw2ise74v3duebgsvug4mehyhlpa7f6kfwnas7zofs3ber7yid.onion",
                     recent_path: "/paste/",
                     raw_path: "/paste/raw/",
                     id_pattern: r#"/paste/([a-zA-Z0-9]+)"#,
@@ -62,7 +63,7 @@ impl Scraper for TorPastesScraper {
         "tor_pastes"
     }
 
-    async fn fetch_recent(&self, client: &reqwest::Client) -> ScraperResult<Vec<DiscoveredPaste>> {
+    async fn fetch_recent(&self, _client: &reqwest::Client) -> ScraperResult<Vec<DiscoveredPaste>> {
         // If no proxy configured, skip silently
         let proxy_url = match &self.proxy_url {
             Some(p) if !p.is_empty() => p.clone(),
@@ -121,7 +122,10 @@ impl TorPastesScraper {
 
         let response = client
             .get(&url)
-            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0")
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; rv:109.0) Gecko/20100101 Firefox/115.0",
+            )
             .send()
             .await?;
 
@@ -151,7 +155,8 @@ impl TorPastesScraper {
                         if let Ok(content) = resp.text().await {
                             // Only keep pastes with credentials
                             if !content.is_empty() && contains_credentials(&content) {
-                                let title = content.lines().next().unwrap_or("Tor Paste").to_string();
+                                let title =
+                                    content.lines().next().unwrap_or("Tor Paste").to_string();
                                 let paste = DiscoveredPaste::new("tor_pastes", paste_id, content)
                                     .with_title(title.chars().take(50).collect::<String>())
                                     .with_url(format!("{}/paste/{}", site.base_url, paste_id))
