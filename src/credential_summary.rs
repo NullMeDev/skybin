@@ -318,7 +318,9 @@ mod tests {
 
     #[test]
     fn test_api_key_extraction() {
-        let content = "my token is ghp_abcdefghijklmnopqrstuvwxyz123456 here";
+        // GitHub PAT requires exactly 36 alphanumeric chars after ghp_
+        // "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij" = 36 chars
+        let content = "my token is ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij here";
         let result = extract_credential_summary(content, 10);
         assert!(result.is_some());
         let summary = result.unwrap();

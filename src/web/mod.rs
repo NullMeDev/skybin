@@ -77,6 +77,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/pastes", get(handlers::get_pastes))
         .route("/api/search", get(handlers::search_api))
         .route("/api/stats", get(handlers::statistics))
+        // HTMX HTML partial endpoints
+        .route("/api/pastes/html", get(handlers::get_pastes_html))
+        .route("/api/stats/html", get(handlers::get_stats_html))
+        .route("/api/search/html", get(handlers::get_search_html))
         .route("/api/health", get(health_check))
         .route("/api/scrapers/health", get(handlers::scraper_health))
         .route("/api/paste/:id", get(handlers::get_paste_api))
@@ -134,7 +138,8 @@ pub fn create_router(state: AppState) -> Router {
         ))
         .layer(SetResponseHeaderLayer::overriding(
             header::CONTENT_SECURITY_POLICY,
-            HeaderValue::from_static("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
+            // Allow HTMX and Alpine.js from unpkg CDN
+            HeaderValue::from_static("default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
         ))
         .layer(SetResponseHeaderLayer::overriding(
             "Permissions-Policy".parse::<axum::http::header::HeaderName>().unwrap(),

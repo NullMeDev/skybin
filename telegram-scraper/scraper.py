@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-SkyBin Telegram Scraper Service v2.7
+SkyBin Telegram Scraper Service v3.0
 
 Features:
-- Multi-worker parallel pipeline (download/extract/post concurrent)
-- Credential summary extraction with count-based titles
+- 12GB file downloads (streaming to disk for large files)
+- Credential-only posting (skips messages without actual credentials)
+- Count-based titles ("3x Netflix, 5x API Key") - NO channel names
+- Multi-worker parallel pipeline (5 concurrent downloads for 80GB server)
 - External file host support (gofile, pixeldrain, mega, mediafire, etc)
 - Archive extraction (zip/rar) - password files only
 - Strict credential detection (no keyword-only matching)
@@ -221,15 +223,15 @@ FILE_HOST_PATTERNS = [
 # Max file size for regular files (5MB)
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
-# Max file size for archives (500MB - prevents stalled downloads)
-# Larger archives tend to timeout or stall Telegram downloads
-MAX_ARCHIVE_SIZE = 500 * 1024 * 1024
+# Max file size for archives (12GB - server has 80GB capacity)
+# Large archives are streamed to disk to avoid memory issues
+MAX_ARCHIVE_SIZE = 12 * 1024 * 1024 * 1024  # 12GB
 
-# Download timeout in seconds (10 minutes max per file)
-DOWNLOAD_TIMEOUT = 600
+# Download timeout in seconds (1 hour max per file for large downloads)
+DOWNLOAD_TIMEOUT = 3600
 
-# Concurrent file downloads limit (10 parallel for speed, respects rate limits via semaphores)
-MAX_CONCURRENT_DOWNLOADS = 10
+# Concurrent file downloads limit (5 parallel - 80GB server constraint)
+MAX_CONCURRENT_DOWNLOADS = 5
 
 # Number of concurrent post workers
 NUM_POST_WORKERS = 3
@@ -584,75 +586,103 @@ def extract_credential_summary(content: str, max_samples: int = 10) -> tuple:
     return summary_title, header
 
 
-def generate_auto_title(content: str, channel_name: str = "Telegram") -> str:
+def generate_auto_title(content: str, channel_name: str = "") -> str:
     """
-    Generate a title based on content analysis.
-    Detects services, credential types, and formats.
+    Generate a credential summary title based on content analysis.
+    Returns a title like "3x Netflix, 5x API Key, 12x Email:Pass" - NO channel name.
     """
     lower = content.lower()
-    detected = []
+    counts = {}  # service/type -> count
     
-    # Detect services
+    # Count services found
     service_keywords = {
         'netflix': 'Netflix', 'spotify': 'Spotify', 'disney': 'Disney+',
         'hbo': 'HBO', 'amazon': 'Amazon', 'prime': 'Prime', 'steam': 'Steam',
+        'hulu': 'Hulu', 'apple': 'Apple', 'icloud': 'iCloud',
         'fortnite': 'Fortnite', 'minecraft': 'Minecraft', 'roblox': 'Roblox',
         'gmail': 'Gmail', 'yahoo': 'Yahoo', 'outlook': 'Outlook',
         'paypal': 'PayPal', 'crypto': 'Crypto', 'nordvpn': 'NordVPN',
         'expressvpn': 'ExpressVPN', 'cpanel': 'cPanel', 'rdp': 'RDP',
         'github': 'GitHub', 'aws': 'AWS', 'mongodb': 'MongoDB',
+        'google': 'Google', 'twitch': 'Twitch', 'tiktok': 'TikTok',
     }
     
     for keyword, name in service_keywords.items():
-        if keyword in lower:
-            detected.append(name)
-            if len(detected) >= 2:
-                break
+        # Count actual credential lines mentioning this service
+        service_pattern = re.compile(rf'{keyword}[^\n]*:[^\s]{{4,}}', re.IGNORECASE)
+        matches = service_pattern.findall(content)
+        if matches:
+            counts[name] = len(matches)
     
-    # Detect format
-    format_type = None
-    if re.search(r'https?://[^\s]+[\s\t|:]+[^\s@]+[\s\t|:]+[^\s]{4,}', content):
-        format_type = "URL:Login:Pass"
-    elif re.search(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@:]{4,}', content):
-        format_type = "Email:Pass"
-    elif re.search(r'\b[a-zA-Z0-9_.+-]+:[^\s@:]{6,}', content):
-        format_type = "User:Pass"
-    elif has_actual_bin_data(content):
-        format_type = "BINs/Cards"
+    # Count API keys by type
+    api_patterns = {
+        'GitHub PAT': r'ghp_[a-zA-Z0-9]{36}',
+        'OpenAI Key': r'sk-[a-zA-Z0-9]{48}',
+        'AWS Key': r'AKIA[0-9A-Z]{16}',
+        'Google API': r'AIza[0-9A-Za-z_-]{35}',
+        'Discord Token': r'[MN][A-Za-z0-9]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}',
+        'Slack Token': r'xox[baprs]-[0-9]{10,}-[a-zA-Z0-9-]+',
+        'Private Key': r'-----BEGIN.*PRIVATE KEY-----',
+    }
     
-    # Count credentials
+    for name, pattern in api_patterns.items():
+        matches = re.findall(pattern, content)
+        if matches:
+            counts[name] = len(matches)
+    
+    # Count credential formats
     email_pass_count = len(re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+:[^\s@:]{4,}', content))
-    line_count = len(content.split('\n'))
+    if email_pass_count > 0:
+        counts['Email:Pass'] = email_pass_count
     
-    # Build title
-    parts = [f"[TG] {channel_name}"]
+    url_login_count = len(re.findall(r'https?://[^\s]+[\s\t|:]+[^\s@]+[\s\t|:]+[^\s]{4,}', content))
+    if url_login_count > 0:
+        counts['URL:Login:Pass'] = url_login_count
     
-    if detected:
-        parts.append(" | ".join(detected[:2]))
+    # Check for BIN/card data
+    if has_actual_bin_data(content):
+        counts['BINs/Cards'] = 1
     
-    if format_type:
-        parts.append(format_type)
+    # Build title from counts - sorted by count descending
+    if not counts:
+        # Fallback: count lines as generic combos
+        line_count = len([l for l in content.split('\n') if ':' in l and len(l.strip()) > 10])
+        if line_count > 0:
+            return f"{line_count}x Combos"
+        return "Credential Leak"
     
-    if email_pass_count > 10:
-        parts.append(f"{email_pass_count} combos")
-    elif line_count > 100:
-        parts.append(f"{line_count} lines")
+    sorted_items = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+    title_parts = [f"{count}x {name}" for name, count in sorted_items[:4]]  # Max 4 items
     
-    return " - ".join(parts)[:100]
+    return ", ".join(title_parts)[:100]
 
 async def post_to_skybin(content: str, base_title: str, source: str = "telegram"):
-    """Post discovered content to SkyBin API with credential summary header"""
+    """
+    Post discovered content to SkyBin API with credential summary header.
+    ONLY posts if actual credentials are found - skips empty/non-credential content.
+    """
     if len(content) < 50:  # Lowered threshold
+        return False
+    
+    # STRICT: Only post if content has actual credentials
+    if not is_leak_content(content):
+        logger.debug(f"Skipping post - no credentials found in content")
         return False
     
     # Generate credential summary - returns (summary_title, summary_header)
     summary_title, summary_header = extract_credential_summary(content)
     
-    # Build final title: "2x API Key, 3x Email:Pass" or fall back to base title
+    # STRICT: Skip if no credentials detected in summary (double-check)
+    if not summary_title and not summary_header:
+        logger.debug(f"Skipping post - credential extraction returned empty")
+        return False
+    
+    # Build final title: Use summary title ("3x Netflix, 5x Email:Pass") or fallback
     if summary_title:
         final_title = summary_title
     else:
-        final_title = base_title if base_title else "Telegram Leak"
+        # Generate title from content analysis (no channel name)
+        final_title = generate_auto_title(content)
     
     # Prepend header to content
     if summary_header:
@@ -850,9 +880,113 @@ class TelegramScraper:
         logger.info(f"Total channels/groups to monitor: {len(self.active_channels)}")
         return self.active_channels
     
+    async def stream_download_to_file(self, session: aiohttp.ClientSession, url: str, 
+                                        headers: dict = None, fname: str = "unknown") -> str:
+        """
+        Stream download a large file to a temp file with progress logging.
+        Returns the temp file path, or None on failure.
+        Caller is responsible for cleanup.
+        """
+        tmp_path = None
+        try:
+            ext = os.path.splitext(fname)[1] or '.tmp'
+            with tempfile.NamedTemporaryFile(suffix=ext, prefix=TEMP_FILE_PREFIX, delete=False) as tmp:
+                tmp_path = tmp.name
+            
+            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=DOWNLOAD_TIMEOUT)) as resp:
+                if resp.status != 200:
+                    if tmp_path and os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                    return None
+                
+                total_size = int(resp.headers.get('Content-Length', 0))
+                downloaded = 0
+                last_log = 0
+                
+                with open(tmp_path, 'wb') as f:
+                    async for chunk in resp.content.iter_chunked(1024 * 1024):  # 1MB chunks
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        
+                        # Log progress every 100MB
+                        if total_size > 0 and downloaded - last_log >= 100 * 1024 * 1024:
+                            pct = (downloaded / total_size) * 100
+                            logger.info(f"    📥 {fname}: {downloaded / 1024 / 1024:.0f}MB / {total_size / 1024 / 1024:.0f}MB ({pct:.1f}%)")
+                            last_log = downloaded
+                
+                return tmp_path
+                
+        except Exception as e:
+            logger.error(f"  Stream download error: {e}")
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            return None
+
+    async def extract_text_from_archive_file(self, file_path: str, filename: str, channel_name: str) -> int:
+        """
+        Extract ONLY password files from an archive file on disk and post them.
+        Used for large archives that were streamed to disk.
+        Returns number of files processed.
+        """
+        processed = 0
+        lower_filename = filename.lower()
+        
+        try:
+            if lower_filename.endswith('.zip'):
+                with zipfile.ZipFile(file_path, 'r') as zf:
+                    for info in zf.infolist():
+                        if info.is_dir() or info.file_size > MAX_FILE_SIZE:
+                            continue
+                        if not is_password_file(info.filename):
+                            continue
+                        try:
+                            data = zf.read(info.filename)
+                            try:
+                                content = data.decode('utf-8', errors='ignore')
+                            except:
+                                content = data.decode('latin-1', errors='ignore')
+                            
+                            if len(content) > 50 and is_leak_content(content):
+                                title = generate_auto_title(content)
+                                await self.post_queue.put((content, title))
+                                processed += 1
+                                logger.info(f"    🔑 Extracted password file: {info.filename}")
+                        except Exception as e:
+                            logger.debug(f"    Error extracting {info.filename}: {e}")
+            
+            elif lower_filename.endswith('.rar') and HAS_RARFILE:
+                with rarfile.RarFile(file_path, 'r') as rf:
+                    for info in rf.infolist():
+                        if info.is_dir() or info.file_size > MAX_FILE_SIZE:
+                            continue
+                        if not is_password_file(info.filename):
+                            continue
+                        try:
+                            data = rf.read(info.filename)
+                            try:
+                                content = data.decode('utf-8', errors='ignore')
+                            except:
+                                content = data.decode('latin-1', errors='ignore')
+                            
+                            if len(content) > 50 and is_leak_content(content):
+                                title = generate_auto_title(content)
+                                await self.post_queue.put((content, title))
+                                processed += 1
+                                logger.info(f"    🔑 Extracted password file: {info.filename}")
+                        except Exception as e:
+                            logger.debug(f"    Error extracting {info.filename}: {e}")
+            
+            elif lower_filename.endswith('.rar') and not HAS_RARFILE:
+                logger.warning(f"  Cannot extract .rar - rarfile not installed")
+                
+        except Exception as e:
+            logger.error(f"  Error extracting archive {filename}: {e}")
+        
+        return processed
+
     async def extract_text_from_archive(self, buffer: io.BytesIO, filename: str, channel_name: str) -> int:
         """
-        Extract ONLY password files from a zip/rar archive and post them.
+        Extract ONLY password files from a zip/rar archive (in memory) and post them.
         Returns number of files processed.
         """
         processed = 0
@@ -1237,6 +1371,7 @@ class TelegramScraper:
     async def process_external_link(self, url: str, host: str, channel_name: str) -> bool:
         """
         Download and process a file from an external host.
+        For large files (>500MB), streams to disk instead of memory.
         Extracts password files and posts to SkyBin, then cleans up.
         Returns True if successful.
         """
@@ -1245,6 +1380,9 @@ class TelegramScraper:
         
         self.processed_links.add(url)
         logger.info(f"  🔗 Downloading from {host}: {url[:60]}...")
+        
+        # Threshold for streaming to disk instead of memory
+        STREAM_THRESHOLD = 500 * 1024 * 1024  # 500MB
         
         try:
             # Download based on host
@@ -1272,15 +1410,33 @@ class TelegramScraper:
                 return False
             
             self.links_downloaded += 1
-            logger.info(f"  📥 Downloaded: {fname} ({len(data) / 1024 / 1024:.1f}MB)")
+            file_size = len(data)
+            logger.info(f"  📥 Downloaded: {fname} ({file_size / 1024 / 1024:.1f}MB)")
             
             # Check if it's an archive
             lower = fname.lower()
             if any(lower.endswith(ext) for ext in ARCHIVE_EXTENSIONS):
-                buffer = io.BytesIO(data)
-                extracted = await self.extract_text_from_archive(buffer, fname, f"{channel_name}/{host}")
-                buffer.close()
-                del data
+                # For very large files, write to disk first
+                if file_size > STREAM_THRESHOLD:
+                    tmp_path = None
+                    try:
+                        ext = os.path.splitext(fname)[1]
+                        with tempfile.NamedTemporaryFile(suffix=ext, prefix=TEMP_FILE_PREFIX, delete=False) as tmp:
+                            tmp.write(data)
+                            tmp_path = tmp.name
+                        del data  # Free memory immediately
+                        
+                        logger.info(f"  💾 Large archive saved to temp, extracting...")
+                        extracted = await self.extract_text_from_archive_file(tmp_path, fname, channel_name)
+                    finally:
+                        if tmp_path and os.path.exists(tmp_path):
+                            os.unlink(tmp_path)
+                            logger.debug(f"  🗑️ Cleaned up temp file")
+                else:
+                    buffer = io.BytesIO(data)
+                    extracted = await self.extract_text_from_archive(buffer, fname, f"{channel_name}/{host}")
+                    buffer.close()
+                    del data
                 
                 if extracted > 0:
                     logger.info(f"  ✓ Extracted {extracted} password files from {fname}")
@@ -1299,7 +1455,7 @@ class TelegramScraper:
                 del data
                 
                 if is_password_file(fname) or is_leak_content(content):
-                    title = generate_auto_title(content, f"{channel_name}/{host}")
+                    title = generate_auto_title(content)
                     await self.post_queue.put((content, title))
                     logger.info(f"  ✓ Posted content from: {fname}")
                     return True
@@ -1375,41 +1531,40 @@ class TelegramScraper:
                 if is_archive:
                     logger.info(f"  📦 Processing archive: {filename}")
                     
-                    # For large archives, download directly to temp file
+                    # For large archives (>100MB), download to disk and extract directly
                     if file_size > 100 * 1024 * 1024:  # > 100MB
                         tmp_path = None
                         try:
-                            with tempfile.NamedTemporaryFile(suffix=os.path.splitext(filename)[1], delete=False) as tmp:
+                            ext = os.path.splitext(filename)[1]
+                            with tempfile.NamedTemporaryFile(suffix=ext, prefix=TEMP_FILE_PREFIX, delete=False) as tmp:
                                 tmp_path = tmp.name
                             
-                            logger.info(f"  📥 Downloading large archive to temp...")
+                            logger.info(f"  📥 Downloading large archive ({file_size / 1024 / 1024 / 1024:.2f}GB) to temp...")
                             await self.client.download_media(message, tmp_path)
+                            logger.info(f"  💾 Download complete, extracting from disk...")
                             
-                            # Read into buffer for extraction
-                            with open(tmp_path, 'rb') as f:
-                                buffer = io.BytesIO(f.read())
-                            
-                            # Delete temp file immediately after reading
-                            os.unlink(tmp_path)
-                            tmp_path = None
-                            logger.info(f"  🗑️ Temp file deleted, extracting from memory...")
+                            # Extract directly from disk file (no memory copy)
+                            extracted = await self.extract_text_from_archive_file(tmp_path, filename, channel_name)
                             
                         except Exception as e:
                             logger.error(f"  Error with large archive: {e}")
+                            extracted = 0
+                        finally:
+                            # Always clean up temp file
                             if tmp_path and os.path.exists(tmp_path):
                                 os.unlink(tmp_path)
-                            return False
+                                logger.debug(f"  🗑️ Cleaned up temp file")
                     else:
                         # Smaller archives - download to memory
                         buffer = io.BytesIO()
                         await self.client.download_media(message, buffer)
                         buffer.seek(0)
-                    
-                    extracted = await self.extract_text_from_archive(buffer, filename, channel_name)
-                    
-                    # Clear buffer to free memory
-                    buffer.close()
-                    del buffer
+                        
+                        extracted = await self.extract_text_from_archive(buffer, filename, channel_name)
+                        
+                        # Clear buffer to free memory
+                        buffer.close()
+                        del buffer
                     
                     if extracted > 0:
                         self.files_downloaded += extracted

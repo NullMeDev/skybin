@@ -1,6 +1,6 @@
 [package]
 name = "skybin"
-version = "2.2.0"
+version = "2.3.0"
 edition = "2021"
 authors = ["NullMe <dev@nullme.lol>"]
 description = "Multi-source paste aggregator with pattern detection"
@@ -19,6 +19,7 @@ tokio = { version = "1.42", features = ["full"] }
 
 # Web framework
 axum = { version = "0.7", features = ["macros"] }
+axum-htmx = "0.6"
 tower = "0.5"
 tower-http = { version = "0.6", features = ["fs", "trace", "compression-gzip", "set-header"] }
 

@@ -131,11 +131,12 @@ lazy_static! {
 
         // Credit Cards - Match major card prefixes with Luhn-like structure
         // Visa: 4xxx, MC: 51-55, Amex: 34/37, Discover: 6011/65
+        // Supports optional dashes or spaces between digit groups
         m.insert(
             "credit_card".to_string(),
             PatternRule::new(
                 "Credit Card Number",
-                r"\b(?:4[0-9]{15}|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})\b",
+                r"\b(?:4[0-9]{3}[- ]?[0-9]{4}[- ]?[0-9]{4}[- ]?[0-9]{4}|5[1-5][0-9]{2}[- ]?[0-9]{4}[- ]?[0-9]{4}[- ]?[0-9]{4}|3[47][0-9]{2}[- ]?[0-9]{6}[- ]?[0-9]{5}|6(?:011|5[0-9]{2})[- ]?[0-9]{4}[- ]?[0-9]{4}[- ]?[0-9]{4})\b",
                 Severity::Critical,
                 "financial",
             ).unwrap(),

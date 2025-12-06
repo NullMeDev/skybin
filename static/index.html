@@ -5,11 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SkyBin</title>
     <link rel="stylesheet" href="/static/styles.css">
+    <!-- HTMX for partial page updates -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Alpine.js for reactive UI state -->
+    <script defer src="https://unpkg.com/alpinejs@3.13.3/dist/cdn.min.js"></script>
 </head>
 <body>
     <nav>
         <div class="container">
-<a href="/" class="logo">SkyBin <span>v2.1.0</span></a>
+<a href="/" class="logo">SkyBin <span>v2.3.0</span></a>
             <ul class="nav-links">
                 <li><a href="/" class="active">Feed</a></li>
                 <li><a href="/search">Search</a></li>
@@ -28,58 +32,86 @@
                 <p>Real-time aggregation from public paste sites</p>
             </div>
 
-            <div class="stats-bar" id="stats-bar">
-                <div class="stat">
-                    <div class="stat-value" id="stat-total">--</div>
-                    <div class="stat-label">Total</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" id="stat-sensitive">--</div>
-                    <div class="stat-label">Sensitive</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" id="stat-recent">--</div>
-                    <div class="stat-label">Last 24h</div>
-                </div>
-                <div class="stat" id="sources-stat" style="cursor: pointer;" onclick="toggleSourcesModal()">
-                    <div class="stat-value" id="stat-sources">--</div>
-                    <div class="stat-label">Sources ▼</div>
+            <!-- HTMX-powered stats bar - auto-refreshes every 30s -->
+            <div class="stats-bar" id="stats-bar"
+                 hx-get="/api/stats/html"
+                 hx-trigger="load, every 30s"
+                 hx-swap="innerHTML">
+                <!-- Skeleton loaders shown initially -->
+                <div class="stat skeleton-stat"></div>
+                <div class="stat skeleton-stat"></div>
+                <div class="stat skeleton-stat"></div>
+                <div class="stat skeleton-stat"></div>
+            </div>
+
+            <!-- Alpine.js powered filters -->
+            <div class="filters" x-data="{ activeFilter: 'all' }">
+                <button class="filter-btn" :class="{ 'active': activeFilter === 'all' }" 
+                        @click="activeFilter = 'all'; htmx.ajax('GET', '/api/pastes/html', '#paste-container')">All</button>
+                <button class="filter-btn" :class="{ 'active': activeFilter === 'alerts' }" 
+                        style="background: linear-gradient(135deg, #dc2626, #991b1b); color: white;"
+                        @click="activeFilter = 'alerts'; htmx.ajax('GET', '/api/pastes/html?high_value=true', '#paste-container')">🚨 Alerts</button>
+                <button class="filter-btn" :class="{ 'active': activeFilter === 'interesting' }" 
+                        style="background: linear-gradient(135deg, #f39c12, #e74c3c);"
+                        @click="activeFilter = 'interesting'; htmx.ajax('GET', '/api/pastes/html?interesting=true', '#paste-container')">🔥 Interesting</button>
+                <button class="filter-btn" :class="{ 'active': activeFilter === 'sensitive' }"
+                        @click="activeFilter = 'sensitive'; htmx.ajax('GET', '/api/pastes/html?sensitive=true', '#paste-container')">Sensitive Only</button>
+                <button class="filter-btn" :class="{ 'active': activeFilter === 'pastebin' }"
+                        @click="activeFilter = 'pastebin'; htmx.ajax('GET', '/api/pastes/html?source=pastebin', '#paste-container')">Pastebin</button>
+                <button class="filter-btn" :class="{ 'active': activeFilter === 'github' }"
+                        @click="activeFilter = 'github'; htmx.ajax('GET', '/api/pastes/html?source=gists', '#paste-container')">GitHub</button>
+                <button class="filter-btn" :class="{ 'active': activeFilter === 'ideone' }"
+                        @click="activeFilter = 'ideone'; htmx.ajax('GET', '/api/pastes/html?source=ideone', '#paste-container')">Ideone</button>
+                <button class="filter-btn" :class="{ 'active': activeFilter === 'telegram' }"
+                        @click="activeFilter = 'telegram'; htmx.ajax('GET', '/api/pastes/html?source=telegram', '#paste-container')">Telegram</button>
+            </div>
+
+            <!-- HTMX-powered paste container with infinite scroll -->
+            <div id="paste-container"
+                 hx-get="/api/pastes/html"
+                 hx-trigger="load, every 30s"
+                 hx-swap="innerHTML">
+                <!-- Skeleton loaders shown initially -->
+                <div class="paste-list">
+                    <div class="skeleton-paste"></div>
+                    <div class="skeleton-paste"></div>
+                    <div class="skeleton-paste"></div>
+                    <div class="skeleton-paste"></div>
+                    <div class="skeleton-paste"></div>
                 </div>
             </div>
 
-            <div class="filters">
-                <button class="filter-btn active" data-filter="all">All</button>
-                <button class="filter-btn" data-filter="alerts" style="background: linear-gradient(135deg, #dc2626, #991b1b); color: white;">🚨 Alerts</button>
-                <button class="filter-btn" data-filter="interesting" style="background: linear-gradient(135deg, #f39c12, #e74c3c);">🔥 Interesting</button>
-                <button class="filter-btn" data-filter="sensitive">Sensitive Only</button>
-                <button class="filter-btn" data-filter="pastebin">Pastebin</button>
-                <button class="filter-btn" data-filter="github">GitHub</button>
-                <button class="filter-btn" data-filter="ideone">Ideone</button>
-                <button class="filter-btn" data-filter="telegram">Telegram</button>
-            </div>
-
-            <div id="paste-container">
-                <div class="loading">
-                    <div class="spinner"></div>
-                    Loading pastes...
-                </div>
-            </div>
-
-            <div class="pagination" id="pagination" style="display: none;">
-                <button id="prev-btn" disabled>Previous</button>
-                <button id="next-btn">Next</button>
-            </div>
+            <!-- Pagination removed - using infinite scroll via HTMX -->
         </div>
     </main>
 
-    <!-- Sources Modal -->
-    <div id="sources-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center;">
-        <div style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 70vh; overflow-y: auto;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h3 style="color: var(--text-primary);">Source Status</h3>
-                <button onclick="toggleSourcesModal()" style="background: none; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer;">×</button>
+    <!-- Alpine.js Sources Modal -->
+    <div x-data="sourcesModal()" @keydown.escape.window="open = false">
+        <!-- Modal Backdrop -->
+        <div x-show="open" x-transition:enter="transition ease-out duration-200" 
+             x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+             @click="open = false"
+             style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center;"
+             :style="open ? 'display: flex' : 'display: none'">
+            <!-- Modal Content -->
+            <div @click.stop style="background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 70vh; overflow-y: auto;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="color: var(--text-primary);">Source Status</h3>
+                    <button @click="open = false" style="background: none; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer;">&times;</button>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <template x-for="source in sources" :key="source.name">
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-primary); border-radius: 6px;">
+                            <span style="color: var(--text-primary);" x-text="source.label"></span>
+                            <span :style="'color: ' + (source.active ? '#00ff88' : '#888') + '; font-size: 12px;'">
+                                ● <span x-text="source.active ? 'Active' : 'Idle'"></span>
+                            </span>
+                        </div>
+                    </template>
+                </div>
             </div>
-            <div id="sources-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
         </div>
     </div>
 
@@ -96,232 +128,63 @@
     </footer>
 
     <script>
-        const API_BASE = '/api';
-        let currentPage = 0;
-        let currentFilter = 'all';
-        const LIMIT = 25;
-
-        function formatTime(timestamp) {
-            const date = new Date(timestamp * 1000);
-            const now = new Date();
-            const diff = Math.floor((now - date) / 1000);
-            
-            if (diff < 60) return 'just now';
-            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-            if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
-            return date.toLocaleDateString();
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        async function loadStats() {
-            try {
-                const res = await fetch(`${API_BASE}/stats`);
-                const data = await res.json();
-                if (data.success) {
-                    document.getElementById('stat-total').textContent = data.data.total_pastes.toLocaleString();
-                    document.getElementById('stat-sensitive').textContent = data.data.sensitive_pastes.toLocaleString();
-                    document.getElementById('stat-recent').textContent = data.data.recent_count.toLocaleString();
+        // Alpine.js component for sources modal
+        function sourcesModal() {
+            return {
+                open: false,
+                sources: [
+                    { name: 'pastebin', label: 'Pastebin', active: false },
+                    { name: 'gists', label: 'GitHub Gists', active: false },
+                    { name: 'ideone', label: 'Ideone', active: false },
+                    { name: 'paste_ee', label: 'Paste.ee', active: false },
+                    { name: 'rentry', label: 'Rentry', active: false },
+                    { name: 'dpaste', label: 'dpaste', active: false },
+                    { name: 'hastebin', label: 'Hastebin', active: false },
+                    { name: 'slexy', label: 'Slexy', active: false },
+                    { name: 'ubuntu_pastebin', label: 'Ubuntu Pastebin', active: false },
+                    { name: 'justpaste', label: 'JustPaste', active: false },
+                    { name: 'controlc', label: 'ControlC', active: false },
+                    { name: 'pastecode', label: 'Pastecode', active: false },
+                    { name: 'dpaste_org', label: 'dpaste.org', active: false },
+                    { name: 'defuse', label: 'Defuse', active: false },
+                    { name: 'codepad', label: 'Codepad', active: false },
+                    { name: 'bpaste', label: 'bpaste', active: false },
+                    { name: 'termbin', label: 'Termbin', active: false },
+                    { name: 'sprunge', label: 'Sprunge', active: false },
+                    { name: 'paste_rs', label: 'paste.rs', active: false },
+                    { name: 'paste2', label: 'Paste2', active: false },
+                    { name: 'pastebin_pl', label: 'Pastebin.pl', active: false },
+                    { name: 'quickpaste', label: 'Quickpaste', active: false },
+                    { name: 'ghostbin', label: 'Ghostbin', active: false },
+                    { name: 'pastesio', label: 'pastes.io', active: false },
+                    { name: 'bpast', label: 'bpa.st', active: false },
+                    { name: 'telegram', label: 'Telegram', active: false },
+                ],
+                async init() {
+                    // Load source activity status
+                    try {
+                        const res = await fetch('/api/stats');
+                        const data = await res.json();
+                        if (data.success && data.data.by_source) {
+                            this.sources.forEach(s => {
+                                s.active = (data.data.by_source[s.name] || 0) > 0;
+                            });
+                        }
+                    } catch (e) {
+                        console.error('Failed to load source status:', e);
+                    }
                 }
-            } catch (e) {
-                console.error('Failed to load stats:', e);
-            }
+            };
         }
-
-        let isInitialLoad = true;
         
-        async function loadPastes() {
-            const container = document.getElementById('paste-container');
-            // Only show loading spinner on initial load, not refreshes
-            if (isInitialLoad) {
-                container.innerHTML = '<div class="loading"><div class="spinner"></div>Loading pastes...</div>';
-            }
-
-            try {
-                let url = `${API_BASE}/pastes?limit=${LIMIT}&offset=${currentPage * LIMIT}`;
-                
-                if (currentFilter === 'alerts') {
-                    url += '&high_value=true';
-                } else if (currentFilter === 'sensitive') {
-                    url += '&sensitive=true';
-                } else if (currentFilter === 'interesting') {
-                    url += '&interesting=true';
-                } else if (currentFilter !== 'all') {
-                    url += `&source=${currentFilter}`;
-                }
-
-                const res = await fetch(url);
-                const data = await res.json();
-
-                if (!data.success || !data.data || data.data.length === 0) {
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            <h3>No pastes found</h3>
-                            <p>Pastes will appear here as they are scraped from public sources.</p>
-                        </div>
-                    `;
-                    document.getElementById('pagination').style.display = 'none';
-                    return;
-                }
-
-                const html = data.data.map(paste => `
-                    <a href="/paste/${paste.id}" class="paste-item${paste.high_value ? ' high-value-item' : ''}">
-                        <div class="paste-info">
-                            <div class="paste-title">${escapeHtml(paste.title || 'Untitled')}</div>
-                            <div class="paste-meta">
-                                <span>${paste.syntax || 'plaintext'}</span>
-                            </div>
-                        </div>
-                        <div class="paste-badges">
-                            ${paste.high_value ? '<span class="badge badge-critical">🚨 CRITICAL</span>' : ''}
-                            ${paste.is_sensitive && !paste.high_value ? '<span class="badge badge-sensitive">Sensitive</span>' : ''}
-                            <span class="badge badge-source">${paste.source}</span>
-                        </div>
-                        <div class="paste-time">${formatTime(paste.created_at)}</div>
-                    </a>
-                `).join('');
-
-                container.innerHTML = `<div class="paste-list">${html}</div>`;
-                isInitialLoad = false;
-                
-                // Show pagination
-                const pagination = document.getElementById('pagination');
-                pagination.style.display = 'flex';
-                document.getElementById('prev-btn').disabled = currentPage === 0;
-                document.getElementById('next-btn').disabled = data.data.length < LIMIT;
-
-            } catch (e) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <h3>Failed to load pastes</h3>
-                        <p>Could not connect to the API. Make sure the server is running.</p>
-                        <button class="btn btn-secondary" onclick="loadPastes()">Retry</button>
-                    </div>
-                `;
-            }
-        }
-
-        // Filter buttons
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                currentFilter = btn.dataset.filter;
-                currentPage = 0;
-                loadPastes();
-            });
-        });
-
-        // Pagination
-        document.getElementById('prev-btn').addEventListener('click', () => {
-            if (currentPage > 0) {
-                currentPage--;
-                loadPastes();
-            }
-        });
-
-        document.getElementById('next-btn').addEventListener('click', () => {
-            currentPage++;
-            loadPastes();
-        });
-
-        // Sources data
-        const allSources = [
-            { name: 'pastebin', label: 'Pastebin' },
-            { name: 'gists', label: 'GitHub Gists' },
-            { name: 'ideone', label: 'Ideone' },
-            { name: 'paste_ee', label: 'Paste.ee' },
-            { name: 'rentry', label: 'Rentry' },
-            { name: 'dpaste', label: 'dpaste' },
-            { name: 'hastebin', label: 'Hastebin' },
-            { name: 'slexy', label: 'Slexy' },
-            { name: 'ubuntu_pastebin', label: 'Ubuntu Pastebin' },
-            { name: 'justpaste', label: 'JustPaste' },
-            { name: 'controlc', label: 'ControlC' },
-            { name: 'pastecode', label: 'Pastecode' },
-            { name: 'dpaste_org', label: 'dpaste.org' },
-            { name: 'defuse', label: 'Defuse' },
-            { name: 'codepad', label: 'Codepad' },
-            { name: 'bpaste', label: 'bpaste' },
-            { name: 'termbin', label: 'Termbin' },
-            { name: 'sprunge', label: 'Sprunge' },
-            { name: 'paste_rs', label: 'paste.rs' },
-            { name: 'paste2', label: 'Paste2' },
-            { name: 'pastebin_pl', label: 'Pastebin.pl' },
-            { name: 'quickpaste', label: 'Quickpaste' },
-            { name: 'ghostbin', label: 'Ghostbin' },
-            { name: 'pastesio', label: 'pastes.io' },
-            { name: 'bpast', label: 'bpa.st' },
-            { name: 'telegram', label: 'Telegram' },
-        ];
-        let sourcesStatus = {};
-
-        async function loadSourcesStatus() {
-            try {
-                const res = await fetch(`${API_BASE}/health`);
-                const data = await res.json();
-                // For now, assume all sources enabled are "up"
-                const sourceCount = allSources.length;
-                document.getElementById('stat-sources').textContent = sourceCount;
-                
-                // Mark sources based on recent activity
-                const statsRes = await fetch(`${API_BASE}/stats`);
-                const statsData = await statsRes.json();
-                if (statsData.success && statsData.data.by_source) {
-                    allSources.forEach(s => {
-                        sourcesStatus[s.name] = statsData.data.by_source[s.name] > 0 ? 'active' : 'idle';
-                    });
-                }
-            } catch (e) {
-                document.getElementById('stat-sources').textContent = allSources.length;
-            }
-        }
-
+        // Global function to toggle modal (called from stats bar)
         function toggleSourcesModal() {
-            const modal = document.getElementById('sources-modal');
-            if (modal.style.display === 'flex') {
-                modal.style.display = 'none';
-            } else {
-                modal.style.display = 'flex';
-                renderSourcesList();
+            // Find the Alpine component and toggle it
+            const modalEl = document.querySelector('[x-data="sourcesModal()"]');
+            if (modalEl && modalEl.__x) {
+                modalEl.__x.$data.open = !modalEl.__x.$data.open;
             }
         }
-
-        function renderSourcesList() {
-            const list = document.getElementById('sources-list');
-            list.innerHTML = allSources.map(s => {
-                const status = sourcesStatus[s.name] || 'idle';
-                const color = status === 'active' ? '#00ff88' : '#888';
-                return `
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-primary); border-radius: 6px;">
-                        <span style="color: var(--text-primary);">${s.label}</span>
-                        <span style="color: ${color}; font-size: 12px;">● ${status === 'active' ? 'Active' : 'Idle'}</span>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        // Close modal on outside click
-        document.getElementById('sources-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'sources-modal') toggleSourcesModal();
-        });
-
-        // Initial load
-        loadStats();
-        loadPastes();
-        loadSourcesStatus();
-
-        // Auto-refresh every 30 seconds
-        setInterval(() => {
-            loadStats();
-            loadSourcesStatus();
-            if (currentPage === 0) loadPastes();
-        }, 30000);
     </script>
 </body>
 </html>

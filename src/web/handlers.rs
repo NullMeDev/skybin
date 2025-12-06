@@ -454,6 +454,286 @@ pub async fn statistics(
     Ok(Json(ApiResponse::ok(stats)))
 }
 
+// =============================================================================
+// HTMX HTML PARTIAL ENDPOINTS
+// =============================================================================
+
+/// Helper to format relative time
+fn format_time(timestamp: i64) -> String {
+    let now = chrono::Utc::now().timestamp();
+    let diff = now - timestamp;
+    
+    if diff < 60 {
+        "just now".to_string()
+    } else if diff < 3600 {
+        format!("{}m ago", diff / 60)
+    } else if diff < 86400 {
+        format!("{}h ago", diff / 3600)
+    } else if diff < 604800 {
+        format!("{}d ago", diff / 86400)
+    } else {
+        chrono::DateTime::from_timestamp(timestamp, 0)
+            .map(|dt| dt.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| "unknown".to_string())
+    }
+}
+
+/// GET /api/pastes/html - Returns HTML fragment of paste list for HTMX
+pub async fn get_pastes_html(
+    State(state): State<AppState>,
+    Query(filters): Query<SearchFilters>,
+) -> Result<Html<String>, ApiError> {
+    let db = state
+        .db
+        .lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+
+    let limit = filters.limit.unwrap_or(25).min(100);
+    let offset = filters.offset.unwrap_or(0);
+    let page = offset / limit;
+
+    let pastes = if filters.high_value.unwrap_or(false) {
+        db.get_high_value_pastes(limit, offset)
+            .map_err(|e| ApiError(format!("Failed to fetch high-value pastes: {}", e)))?
+    } else if filters.interesting.unwrap_or(false) {
+        db.get_interesting_pastes(limit, offset)
+            .map_err(|e| ApiError(format!("Failed to fetch interesting pastes: {}", e)))?
+    } else if filters.source.is_some() || filters.is_sensitive.is_some() {
+        db.get_filtered_pastes(
+            filters.source.as_deref(),
+            filters.is_sensitive,
+            limit,
+            offset,
+        )
+        .map_err(|e| ApiError(format!("Failed to fetch filtered pastes: {}", e)))?
+    } else {
+        db.get_recent_pastes_offset(limit, offset)
+            .map_err(|e| ApiError(format!("Failed to fetch pastes: {}", e)))?
+    };
+
+    if pastes.is_empty() {
+        return Ok(Html(r#"
+            <div class="empty-state">
+                <h3>No pastes found</h3>
+                <p>Pastes will appear here as they are scraped from public sources.</p>
+            </div>
+        "#.to_string()));
+    }
+
+    let mut html = String::from(r#"<div class="paste-list">"#);
+    
+    for paste in &pastes {
+        let title = paste.title.as_deref().unwrap_or("Untitled");
+        let title_escaped = html_escape::encode_text(title);
+        let time_str = format_time(paste.created_at);
+        
+        // Determine severity class
+        let severity_class = if paste.high_value {
+            "severity-critical"
+        } else if paste.is_sensitive {
+            "severity-high"
+        } else {
+            ""
+        };
+        
+        // Build badges
+        let mut badges = String::new();
+        if paste.high_value {
+            badges.push_str(r#"<span class="badge badge-critical">🚨 CRITICAL</span>"#);
+        } else if paste.is_sensitive {
+            badges.push_str(r#"<span class="badge badge-sensitive">Sensitive</span>"#);
+        }
+        badges.push_str(&format!(r#"<span class="badge badge-source">{}</span>"#, paste.source));
+        
+        html.push_str(&format!(r#"
+            <a href="/paste/{}" class="paste-item {}">
+                <div class="paste-info">
+                    <div class="paste-title">{}</div>
+                    <div class="paste-meta">
+                        <span>{}</span>
+                    </div>
+                </div>
+                <div class="paste-badges">
+                    {}
+                </div>
+                <div class="paste-time">{}</div>
+            </a>
+        "#, paste.id, severity_class, title_escaped, paste.syntax, badges, time_str));
+    }
+    
+    html.push_str("</div>");
+    
+    // Add infinite scroll trigger if there might be more results
+    if pastes.len() == limit {
+        let next_offset = offset + limit;
+        let filter_params = build_filter_params(&filters);
+        html.push_str(&format!(r##"
+            <div class="load-more-trigger"
+                 hx-get="/api/pastes/html?offset={}{}"
+                 hx-trigger="revealed"
+                 hx-swap="outerHTML"
+                 hx-indicator="#loading-indicator">
+                <div class="loading-indicator" id="loading-indicator">
+                    <div class="spinner"></div>
+                    Loading more...
+                </div>
+            </div>
+        "##, next_offset, filter_params));
+    }
+    
+    Ok(Html(html))
+}
+
+/// Helper to build filter query params for HTMX pagination
+fn build_filter_params(filters: &SearchFilters) -> String {
+    let mut params = String::new();
+    if let Some(ref source) = filters.source {
+        params.push_str(&format!("&source={}", source));
+    }
+    if let Some(sensitive) = filters.is_sensitive {
+        params.push_str(&format!("&sensitive={}", sensitive));
+    }
+    if filters.high_value.unwrap_or(false) {
+        params.push_str("&high_value=true");
+    }
+    if filters.interesting.unwrap_or(false) {
+        params.push_str("&interesting=true");
+    }
+    params
+}
+
+/// GET /api/stats/html - Returns HTML fragment of stats bar for HTMX
+pub async fn get_stats_html(
+    State(state): State<AppState>,
+) -> Result<Html<String>, ApiError> {
+    let db = state
+        .db
+        .lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+
+    let total_pastes = db
+        .get_paste_count()
+        .map_err(|e| ApiError(format!("Failed to get paste count: {}", e)))?;
+    let sensitive_pastes = db
+        .get_sensitive_paste_count()
+        .map_err(|e| ApiError(format!("Failed to get sensitive count: {}", e)))?;
+    
+    // Get recent count (last 24h)
+    let now = chrono::Utc::now().timestamp();
+    let recent_count = db
+        .get_recent_pastes(1000)
+        .map_err(|e| ApiError(format!("Failed to get recent pastes: {}", e)))?
+        .into_iter()
+        .filter(|p| now - p.created_at < 86400)
+        .count();
+
+    let html = format!(r#"
+        <div class="stat">
+            <div class="stat-value">{}</div>
+            <div class="stat-label">Total</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">{}</div>
+            <div class="stat-label">Sensitive</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value">{}</div>
+            <div class="stat-label">Last 24h</div>
+        </div>
+        <div class="stat" style="cursor: pointer;" onclick="toggleSourcesModal()">
+            <div class="stat-value">26</div>
+            <div class="stat-label">Sources ▼</div>
+        </div>
+    "#, 
+        format_number(total_pastes),
+        format_number(sensitive_pastes),
+        format_number(recent_count as i64)
+    );
+    
+    Ok(Html(html))
+}
+
+/// Helper to format numbers with commas
+fn format_number(n: i64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}K", n as f64 / 1_000.0)
+    } else {
+        n.to_string()
+    }
+}
+
+/// GET /api/search/html - Returns HTML fragment of search results for HTMX
+pub async fn get_search_html(
+    State(state): State<AppState>,
+    Query(filters): Query<SearchFilters>,
+) -> Result<Html<String>, ApiError> {
+    // Rate limit check
+    if !state.rate_limiters.search.check("global") {
+        return Ok(Html(r#"<div class="error-state">Rate limit exceeded. Try again later.</div>"#.to_string()));
+    }
+
+    let mut db = state
+        .db
+        .lock()
+        .map_err(|e| ApiError(format!("Database lock error: {}", e)))?;
+
+    let _ = db.log_activity("search", filters.source.as_deref());
+
+    let pastes = db
+        .search_pastes(&filters)
+        .map_err(|e| ApiError(format!("Search failed: {}", e)))?;
+
+    if pastes.is_empty() {
+        return Ok(Html(r#"
+            <div class="empty-state">
+                <h3>No results found</h3>
+                <p>Try a different search term or adjust your filters.</p>
+            </div>
+        "#.to_string()));
+    }
+
+    let mut html = String::from(r#"<div class="paste-list search-results">"#);
+    html.push_str(&format!(r#"<div class="results-count">{} results found</div>"#, pastes.len()));
+    
+    for paste in &pastes {
+        let title = paste.title.as_deref().unwrap_or("Untitled");
+        let title_escaped = html_escape::encode_text(title);
+        let time_str = format_time(paste.created_at);
+        
+        let severity_class = if paste.high_value {
+            "severity-critical"
+        } else if paste.is_sensitive {
+            "severity-high"
+        } else {
+            ""
+        };
+        
+        let mut badges = String::new();
+        if paste.high_value {
+            badges.push_str(r#"<span class="badge badge-critical">🚨 CRITICAL</span>"#);
+        } else if paste.is_sensitive {
+            badges.push_str(r#"<span class="badge badge-sensitive">Sensitive</span>"#);
+        }
+        badges.push_str(&format!(r#"<span class="badge badge-source">{}</span>"#, paste.source));
+        
+        html.push_str(&format!(r#"
+            <a href="/paste/{}" class="paste-item {}">
+                <div class="paste-info">
+                    <div class="paste-title">{}</div>
+                    <div class="paste-meta"><span>{}</span></div>
+                </div>
+                <div class="paste-badges">{}</div>
+                <div class="paste-time">{}</div>
+            </a>
+        "#, paste.id, severity_class, title_escaped, paste.syntax, badges, time_str));
+    }
+    
+    html.push_str("</div>");
+    Ok(Html(html))
+}
+
 /// Request body for submitting URLs
 #[derive(Debug, Deserialize)]
 pub struct SubmitUrlRequest {
